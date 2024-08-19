@@ -1,0 +1,224 @@
+extends layout
+
+block content
+    div.row.flex-fill.d-flex.justify-content-start(style=height="inherit;")
+        div.col-md-12.text-center.bg-white.text-dark.top-level
+            .row.top-level
+                .row
+                    table#gcfTable(style="width:100%;", class="stripe")
+            .row.top-level
+                .row
+                    p#gcf-count Loading...
+                    p#mean-gcf
+                .row
+                    .col-md-6
+                        canvas#gcf-count-hist-chart
+                    .col-md-6
+                        canvas#gcf-category-chart
+
+
+
+block append head
+    script(src='https://cdn.jsdelivr.net/npm/chart.js', sourcemaps="false")
+
+    link(rel="stylesheet", href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.css")
+    script(src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.js")
+
+    link(rel="stylesheet", href="https://cdn.datatables.net/searchbuilder/1.4.2/css/searchBuilder.bootstrap5.min.css")
+    link(rel="stylesheet", href="https://cdn.datatables.net/datetime/1.4.1/css/dataTables.dateTime.min.css")
+    script(href="https://cdn.datatables.net/datetime/1.4.1/js/dataTables.dateTime.min.js")
+    script(src="https://cdn.datatables.net/searchbuilder/1.4.2/js/dataTables.searchBuilder.min.js")
+    script(src="https://cdn.datatables.net/searchbuilder/1.4.2/js/searchBuilder.bootstrap5.min.js")
+    script(src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js")
+    link(rel="stylesheet", href="https://cdn.datatables.net/buttons/2.3.6/css/buttons.dataTables.min.css")
+    link(rel="stylesheet", href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css")
+
+    style.
+        .top-level {
+            padding: 50px;
+        }
+
+block scripts
+    script.
+        function getInfo() {
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', '/bgc-info', true);
+            xhr.responseType = 'json';
+
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    const results = xhr.response;
+                    document.getElementById("gcf-count").innerHTML = "Total GCFs: " + results[0].gcf_count;
+                    document.getElementById("mean-gcf").innerHTML = "Mean #BGC per GCF: " + results[0].meanbgc;
+                }
+            }
+            xhr.send()
+        }
+
+        function plotGCFChart() {
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', '/gcf-category-count', true);
+            xhr.responseType = 'json';
+
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    const results = xhr.response;
+                    const labels = results.map((row) => row.bgc_type);
+                    const data = results.map((row) => row.unique_families);
+
+                    console.log("labels: " + labels)
+
+                    const canvas = document.getElementById('gcf-category-chart');
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    const chart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'GCFs by Category',
+                                    data: data,
+                                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                                    borderColor: 'rgba(54, 162, 235, 1)',
+                                    borderWidth: 1,
+                                },
+                            ],
+                        },
+                        options: {
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        },
+                    });
+                }
+            }
+            xhr.send();
+        }
+
+        function plotGCFCountHist() {
+            const xhr = new XMLHttpRequest();
+
+            xhr.open('GET', '/gcf-count-hist', true);
+            xhr.responseType = 'json';
+
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    const results = xhr.response;
+                    const labels = results.map((row) => row.bucket_range);
+                    const data = results.map((row) => row.count_in_bucket);
+
+                    console.log("labels: " + labels)
+
+                    const canvas = document.getElementById('gcf-count-hist-chart');
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    const chart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'Histogram of BGC counts per GCF',
+                                    data: data,
+                                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                                    borderColor: 'rgba(54, 162, 235, 1)',
+                                    borderWidth: 1,
+                                },
+                            ],
+                        },
+                        options: {
+                            scales: {
+                                x: {
+                                    ticks: {
+                                        autoSkip: false,
+                                    }
+                                },
+                                y: {
+                                    type: 'logarithmic',
+                                    beginAtZero: true
+                                }
+                            }
+
+                        },
+                    });
+                }
+            }
+            xhr.send();
+        }
+
+        getInfo();
+        plotGCFChart();
+        plotGCFCountHist();
+
+        var table;
+        $(document).ready(function () {
+            table = $('#gcfTable').DataTable({
+                ajax: '/gcf-table',
+                pageLength: 10,
+                scrollCollapse: true,
+                language: {
+                    searchBuilder: {
+                        button: 'Filter',
+                    }
+                },
+                buttons: [
+                    'searchBuilder'
+                ],
+                dom: 'Bflriptip',
+                columns: [
+                    {data: 'gcf_id', name: 'GCF Family', title: 'GCF Family', type: 'int'},
+                    {
+                        data: 'products',
+                        name: 'Types',
+                        title: 'Types',
+                        type: 'string',
+                        render: function (data, type, row) {
+                            if (type === 'display') {
+                                // Find and make values within parentheses bold
+                                var formattedBiomes = data;
+
+                                // var formattedBiomes = data.replace(/\(([^)]+)\)/g, function (match, p1) {
+                                //     return '<strong>(' + p1 + ')</strong>';
+                                // });
+                                return formattedBiomes;
+                            } else {
+                                return data; // For other data types, return as is
+                            }
+                        }
+                    },
+                    {data: 'num_regions', name: 'Count', title: 'Count', type: 'num'},
+                    {
+                        data: 'biomes',
+                        name: 'Biomes',
+                        title: 'Biomes',
+                        type: 'string',
+                        render: function (data, type, row) {
+                            if (type === 'display') {
+                                // Find and make values within parentheses bold
+                                var formattedBiomes = data;
+                                // var formattedBiomes = data.replace(/\(([^)]+)\),/g, function (match, p1) {
+                                //     return '<strong>(' + p1 + '),</strong>';
+                                // });
+                                return formattedBiomes;
+                            } else {
+                                return data; // For other data types, return as is
+                            }
+                        }
+                    },
+                ],
+                order: [[2, 'desc'], [0, 'desc']],
+                createdRow: function (row, data, dataIndex) {
+                    if (data.num_regions > 0) {
+                        var biomeCell = $(row).find('td').eq(3);
+                        biomeCell.html(biomeCell.html().replaceAll('root:', ''));
+                        var famNumCell = $(row).find('td').eq(0);
+                        famNumCell.html('<a href="/bgcs?gcf=' + famNumCell.html() + '" target="_blank">' + famNumCell.html() + '</a>');
+                    }
+                },
+            });
+        });

@@ -1,0 +1,46 @@
+extends layout
+
+block content
+    div.row.flex-fill.d-flex.justify-content-start(style=height="inherit;")
+        .container(height="100%")
+            iframe#contentFrame(src="https://bgc-atlas.cs.uni-tuebingen.de/datasets/" + dataset + "/antismash/index.html#" + anchor width="100%" height ="100%")
+
+block styles
+    style.
+        body {
+            display: block;
+        }
+
+        #overview {
+            display: block;
+        }
+
+block scripts
+    script.
+        function adjustIframeHeight() {
+            var iframe = document.getElementById('contentFrame');
+            if (iframe && iframe.contentWindow && iframe.contentWindow.document) {
+                iframe.style.height = iframe.contentWindow.document.documentElement.scrollHeight + 'px';
+            }
+        }
+
+        function modifyIframeContent() {
+            var iframe = document.getElementById('contentFrame');
+            if (iframe && iframe.contentWindow && iframe.contentWindow.document) {
+                var iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
+
+                // Show the div and apply styles
+                var overviewDiv = iframeDocument.getElementById('overview');
+                if (overviewDiv) {
+                    overviewDiv.style.display = 'block';
+                    overviewDiv.style.padding = '20px';
+                }
+            }
+        }
+
+        document.getElementById('contentFrame').addEventListener('load', function() {
+            adjustIframeHeight();
+            modifyIframeContent();
+        });
+
+        window.addEventListener('resize', adjustIframeHeight);

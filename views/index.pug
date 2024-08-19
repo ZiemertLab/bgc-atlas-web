@@ -1,0 +1,29 @@
+extends layout.pug
+
+block content
+  .container
+    #sample-info.col-md-4
+      p Sample info content goes here.
+    #map.col-md-8
+      p Map content goes here.
+
+block styles
+  style.
+    /* Custom styles for the sample-info and map divs */
+    #sample-info {
+      background-color: #f2f2f2;
+      height: 200px;
+    }
+
+    #map {
+      background-color: #ccc;
+      height: 200px;
+    }
+
+    /* Media queries to stack divs vertically on mobile devices */
+    @media (max-width: 767px) {
+      #sample-info,
+      #map {
+        width: 100% !important;
+      }
+    }

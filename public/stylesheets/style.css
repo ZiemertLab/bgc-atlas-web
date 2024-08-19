@@ -1,0 +1,47 @@
+
+.header-custom {
+  background-color: #333333;
+}
+
+.search-button-custom {
+  color: #FF6666;
+  border-color: #FF6666;
+  background-color: transparent;
+}
+
+.search-button-custom:hover {
+  color: #fff; /* White text on hover */
+  border-color: #FF6666; /* Red border on hover */
+  background-color: #FF6666; /* Red background on hover */
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  position: absolute;
+}
+
+main {
+  height: inherit;
+}
+
+.flex-fill {
+  flex:1;
+}
+
+.bodyParts{
+  border-color: black;
+  fill: #72B8FC;cursor: pointer;
+}
+area.bodyParts
+{
+  fill: black;
+  stroke:gray; /* Replace with none if you like*/
+  stroke-width: 4;
+  cursor: pointer;
+}
+
+area.bodyParts:hover
+{
+  stroke:black;
+}

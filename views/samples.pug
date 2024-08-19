@@ -1,0 +1,100 @@
+extends layout
+
+block content
+    div.row.flex-fill.d-flex.justify-content-start(style=height="inherit;")
+        div.col-sm-12.text-center.bg-white.text-dark
+            table#samplesTable(style="width:100%;", class="stripe")
+
+append head
+    link(rel="stylesheet", href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.css")
+    script(src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.js")
+
+    link(rel="stylesheet", href="https://cdn.datatables.net/searchbuilder/1.4.2/css/searchBuilder.bootstrap5.min.css")
+    link(rel="stylesheet", href="https://cdn.datatables.net/datetime/1.4.1/css/dataTables.dateTime.min.css")
+    script(href="https://cdn.datatables.net/datetime/1.4.1/js/dataTables.dateTime.min.js")
+    script(src="https://cdn.datatables.net/searchbuilder/1.4.2/js/dataTables.searchBuilder.min.js")
+    script(src="https://cdn.datatables.net/searchbuilder/1.4.2/js/searchBuilder.bootstrap5.min.js")
+    script(src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js")
+    link(rel="stylesheet", href="https://cdn.datatables.net/buttons/2.3.6/css/buttons.dataTables.min.css")
+    link(rel="stylesheet", href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css")
+
+    style.
+
+        div.col-sm-12 {
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+        }
+
+        div.dataTables_wrapper select,
+        div.dataTables_wrapper th select {
+            width: 100px;
+        }
+
+        .dt-button {
+            background-color: darkslategray !important;
+            color: white !important;
+        }
+
+        .status-cell {
+            width: 1%;
+            white-space: nowrap;
+        }
+
+        .status-image {
+            max-width: 75%;
+            max-height: 75%;
+        }
+
+
+
+    script.
+        var table;
+        $(document).ready(function () {
+            table = $('#samplesTable').DataTable({
+                ajax: '/sample-data',
+                pageLength: 50,
+                scrollCollapse: true,
+                language: {
+                    searchBuilder : {
+                        button: 'Filter',
+                    }
+                },
+                buttons: [
+                    'searchBuilder'
+                ],
+                dom: 'Bflriptip',
+                columns: [
+                    {data: 'status', name: 'Status', title: 'Status', type: 'string'},
+                    {data: 'sampleacc', name: 'Sample Accession', title: 'Sample Accession', type: 'string'},
+                    {data: 'assembly', name: 'Assembly', title: 'Assembly', type: 'string'},
+                    {data: 'longest_biome', name:'Biome', title:'Biome', type:'string'},
+                    {data: 'submittedseqs', name: '# Contigs', title: '# Contigs', type: 'num'},
+                    {data: 'protocluster_count', name: '#BGCs', title: '#BGCs', type: 'num'},
+                    {data: 'longitude', name: 'Longitude', title: 'Longitude', type: 'num'},
+                    {data: 'latitude', name: 'Latitude', title: 'Latitude', type: 'num'},
+                    {data: 'envbiome', name: 'Environment (biome)', title: 'Environment (biome)', type: 'string'},
+                    {data: 'envfeat', name: 'Environment (feature)', title: 'Environment (feature)', type: 'string'},
+                    {data: 'collectdate', name: 'Collection date', title: 'Collection date', type: 'string'},
+                    {data: 'biosample', name: 'Sample', title: 'Sample', type: 'string'},
+                    {data: 'species', name: 'Species', title: 'Species', type: 'string'},
+                    {data: 'hosttaxid', name: 'Host tax id', title: 'Host tax id', type: 'num'},
+                ],
+                order: [[0, 'desc'], [4, 'desc']],
+                createdRow: function (row, data, dataIndex) {
+                    if (data.status === 'success') {
+                        var statusCell = $(row).find('td').eq(0);
+                        var assemblyCell = $(row).find('td').eq(2);
+                        statusCell.addClass('status-cell');
+                        statusCell.html('<a href="/AS/' + assemblyCell.html() + '" target="_blank"> <img src="/images/antismash_logo.svg" alt="View AS Results" class="status-image"> </a>')
+                        // statusCell.html('<a href="/AS/' + assemblyCell.html() + '" target="_blank"> View AS Results</a>')
+                        var biomeCell = $(row).find('td').eq(3);
+                        biomeCell.html(biomeCell.html().replace('root:', ''));
+                        var sampleCell = $(row).find('td').eq(1);
+                        sampleCell.html('<a href="https://www.ebi.ac.uk/metagenomics/samples/' + sampleCell.html() + '" target="_blank">' + sampleCell.html() + '</a>');
+                        assemblyCell.html('<a href="https://www.ebi.ac.uk/metagenomics/analyses/' + assemblyCell.html() + '" target="_blank">' + assemblyCell.html() + '</a>')
+                    }
+                },
+
+            });
+
+        });

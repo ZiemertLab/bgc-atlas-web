@@ -1,0 +1,196 @@
+extends layout
+
+block content
+    div.row.flex-fill.d-flex.justify-content-start(style=height="inherit;")
+        div.col-md-12.text-center.bg-white.text-dark.top-level
+            .row.top-level
+                .row
+                    table#bgcTable(style="width:100%;", class="stripe")
+            .row.top-level
+                .row
+                    p#bgc-count Loading...
+                    p#meanbgcsamples
+                .row
+                    .col-md-6
+                        canvas#category-chart
+                    .col-md-6
+                        canvas#product-chart
+
+
+
+block append head
+    script(src='https://cdn.jsdelivr.net/npm/chart.js', sourcemaps="false")
+
+    link(rel="stylesheet", href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.css")
+    script(src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.js")
+
+    link(rel="stylesheet", href="https://cdn.datatables.net/searchbuilder/1.4.2/css/searchBuilder.bootstrap5.min.css")
+    link(rel="stylesheet", href="https://cdn.datatables.net/datetime/1.4.1/css/dataTables.dateTime.min.css")
+    script(href="https://cdn.datatables.net/datetime/1.4.1/js/dataTables.dateTime.min.js")
+    script(src="https://cdn.datatables.net/searchbuilder/1.4.2/js/dataTables.searchBuilder.min.js")
+    script(src="https://cdn.datatables.net/searchbuilder/1.4.2/js/searchBuilder.bootstrap5.min.js")
+    script(src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js")
+    link(rel="stylesheet", href="https://cdn.datatables.net/buttons/2.3.6/css/buttons.dataTables.min.css")
+    link(rel="stylesheet", href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css")
+
+    style.
+        .top-level {
+            padding: 50px;
+        }
+
+block scripts
+    script.
+        function getInfo() {
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', '/bgc-info', true);
+            xhr.responseType = 'json';
+
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    const results = xhr.response;
+                    document.getElementById("bgc-count").innerHTML = "Total BGCs: " + results[0].bgc_count;
+                    document.getElementById("meanbgcsamples").innerHTML = "Mean #BGC per sample: " + results[0].meanbgcsamples;
+                }
+            }
+            xhr.send()
+        }
+
+        function plotProdChart() {
+            const xhr = new XMLHttpRequest();
+
+            xhr.open('GET', '/pc-product-count', true);
+            xhr.responseType = 'json';
+
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    const results = xhr.response;
+                    const labels = results.map((row) => row.prod);
+                    const data = results.map((row) => row.count);
+
+                    console.log("labels: " + labels)
+
+                    const canvas = document.getElementById('product-chart');
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    const chart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'Protoclusters by Product',
+                                    data: data,
+                                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                                    borderColor: 'rgba(54, 162, 235, 1)',
+                                    borderWidth: 1,
+                                },
+                            ],
+                        },
+                        options: {
+                            scales: {
+                                x: {
+                                    ticks: {
+                                        autoSkip: false,
+                                    }
+                                },
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+
+                        },
+                    });
+                }
+            }
+            xhr.send();
+        }
+
+        function plotChart() {
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', '/pc-category-count', true);
+            xhr.responseType = 'json';
+
+            xhr.onload = function () {
+                if (xhr.status === 200) {
+                    const results = xhr.response;
+                    const labels = results.map((row) => row.category);
+                    const data = results.map((row) => row.count);
+
+                    console.log("labels: " + labels)
+
+                    const canvas = document.getElementById('category-chart');
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    const chart = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'Protoclusters by Category',
+                                    data: data,
+                                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                                    borderColor: 'rgba(54, 162, 235, 1)',
+                                    borderWidth: 1,
+                                },
+                            ],
+                        },
+                        options: {
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        },
+                    });
+                }
+            }
+            xhr.send();
+        }
+
+        getInfo();
+        plotChart();
+        plotProdChart();
+
+        var table;
+        $(document).ready(function () {
+            table = $('#bgcTable').DataTable({
+                ajax: '/bgc-table',
+                pageLength: 10,
+                scrollCollapse: true,
+                language: {
+                    searchBuilder: {
+                        button: 'Filter',
+                    }
+                },
+                buttons: [
+                    'searchBuilder'
+                ],
+                dom: 'Bflriptip',
+                columns: [
+                    {data: 'id', name: 'BGC number', title: 'BGC number', type: 'num'},
+                    {data: 'assembly', name: 'Assembly', title: 'Assembly', type: 'string'},
+                    {data: 'category', name: 'Category', title: 'Category', type: 'string'},
+                    {data: 'product', name: 'Product', title: 'Product', type: 'string'},
+                    {data: 'biome', name: 'Biome', title: 'Biome', type: 'string'},
+                    {data: 'family_number', name: 'GCF', title: 'GCF', type: 'string'},
+                    {data: 'contig_edge', name: 'Contig Edge', title: 'Contig Edge', type: 'boolean'},
+                    {data: 'contig', name: 'Contig', title: 'Contig', type: 'string'},
+                    {data: 'region', name: 'Region#', title: 'Region#', type: 'string'},
+                ],
+                createdRow: function (row, data, dataIndex) {
+                    if (data.id > 0) {
+                        var rowNumCell = $(row).find('td').eq(0);
+                        var rowNum = rowNumCell.html();
+                        var paddedRowNum = rowNum.padStart(9, '0');
+                        rowNumCell.html("BGC_" + paddedRowNum);
+                        var biomeCell = $(row).find('td').eq(4);
+                        biomeCell.html(biomeCell.html().replaceAll('root:', ''));
+                        var assemblyCell = $(row).find('td').eq(1);
+                        assemblyCell.html('<a href="https://bgc-atlas.ziemertlab.com/datasets/' + assemblyCell.html() + '/antismash/index.html" target="_blank">' + assemblyCell.html() + '</a>');
+                    }
+                },
+            });
+        });

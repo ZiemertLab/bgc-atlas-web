@@ -1,0 +1,36 @@
+.custom-navbar {
+    background-color: rgb(165, 30, 55) !important;
+}
+
+.custom-navbar .nav-link,
+.custom-navbar .navbar-brand {
+    color: #fff !important;
+}
+
+.custom-navbar .nav-link:hover,
+.custom-navbar .navbar-brand:hover {
+    color: #ddd !important;
+}
+
+.custom-navbar .form-control {
+    background-color: #fff !important;
+    color: rgb(165, 30, 55) !important;
+    border-color: rgb(165, 30, 55) !important;
+}
+
+.custom-navbar .btn-outline-success {
+    background-color: #fff !important;
+    color: rgb(165, 30, 55) !important;
+    border-color: rgb(165, 30, 55) !important;
+}
+
+.custom-navbar .btn-outline-success:hover {
+    background-color: rgb(165, 30, 55) !important;
+    color: #fff !important;
+    border-color: rgb(165, 30, 55) !important;
+}
+
+.bg-custom {
+    background-color: rgb(165, 30, 55) !important;;
+    color: #fff;
+}

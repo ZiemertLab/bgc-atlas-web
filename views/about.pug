@@ -1,0 +1,42 @@
+extends layout
+
+block content
+    div.row.flex-fill.d-flex.justify-content-start(style=height="inherit;")
+        .container(height="100%")
+            h1 BGC Atlas
+                p BGC Atlas is a comprehensive web resource dedicated to exploring the diversity of biosynthetic gene clusters (BGCs) in metagenomes. Leveraging the power of metagenomics, BGC Atlas identifies and analyzes BGCs from diverse environmental samples, providing insights into the chemical diversity encoded in bacterial genomes. Our goal is to enhance the understanding of secondary metabolites produced by microorganisms and their ecological and evolutionary roles.
+
+                h2 Key Features
+                ol
+                    li
+                        strong Data Collection and Integration
+                        ul
+                            li Metagenomic datasets are sourced from publicly available repositories such as MGnify and JGI IMG/M.
+                            li Datasets are processed to extract assembled contigs and associated metadata, providing detailed environmental context for each BGC.
+                    li
+                        strong BGC Identification and Annotation
+                        ul
+                            li The antiSMASH tool is used to identify and annotate BGCs within metagenomic assemblies.
+                            li Annotations include the types of secondary metabolites, predicted chemical structures, and functional domains present in each BGC.
+                    li
+                        strong Clustering and Analysis
+                        ul
+                            li Identified BGCs are clustered into gene cluster families (GCFs) using BiG-SLiCE, facilitating meaningful biological insights.
+                            li Detailed analysis of GCF distribution across different environments highlights habitat specificity and ecological adaptations.
+                    li
+                        strong User-Friendly Web Interface
+                        ul
+                            li The intuitive web interface allows users to explore BGCs, GCFs, and samples with ease.
+                            li Users can filter and search for BGCs based on specific criteria, visualize their distribution across various biomes, and query the database for similar clusters.
+
+                h2 Future Directions
+                p BGC Atlas is committed to continuous improvement through:
+                ul
+                    li Expanding data sources to include more comprehensive and diverse metagenomic datasets.
+                    li Incorporating long-read sequencing data to improve the accuracy and completeness of BGC assemblies.
+                    li Enhancing collaborative efforts with the scientific community to grow and refine the database.
+                    li Integrating additional omics data (e.g., transcriptomics, proteomics) for a more holistic understanding of microbial biosynthesis.
+
+                h2 Acknowledgments
+                p BGC Atlas is developed with the support of the German Research Foundation (DFG) and the German Centre for Infection Research (DZIF). We also acknowledge the computational resources provided by BinAC, de.NBI, and the Interfaculty Institute for Biomedical Informatics (IBMI) at the University of Tübingen.
+                p For more information or to provide feedback, please contact us at [email address].
