@@ -1,0 +1,111 @@
+extends layout
+
+block content
+    div.row.flex-fill.d-flex.justify-content-start(style=height = "inherit;")
+        div.col-md-12.text-center.bg-white.text-dark.top-level
+            p Homology Search
+
+            form(id="search-bgc", action="/submit", method="post", enctype="multipart/form-data", style="margin-left: 20px; margin-right: 20px;")
+                // Add a file upload input field
+                div.form-group
+                    label(for="fastaFile") GenBank File:
+                    input.form-control(type="file", id="fastaFile", name="fastaFile")
+
+                    // Add a submit button
+                    button.btn.btn-primary(type="submit", style="margin-top: 20px;") Submit
+
+                // Add a status message
+                span#upload-status-message.badge(style="margin-top: 20px;")
+
+        div.col-md-12.text-center.bg-white.text-dark.top-level
+            table(id="results", style="margin-left: 20px; margin-right: 20px; width:100%; display = none;", class="stripe")
+                thead
+                    tr
+                        th BGC Name
+                        th GCF ID
+                        th Membership Value
+                    tbody(id="results-body")
+
+append head
+    link(rel="stylesheet", href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.css")
+    script(src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.js")
+
+    link(rel="stylesheet", href="https://cdn.datatables.net/searchbuilder/1.4.2/css/searchBuilder.bootstrap5.min.css")
+    link(rel="stylesheet", href="https://cdn.datatables.net/datetime/1.4.1/css/dataTables.dateTime.min.css")
+    script(src="https://cdn.datatables.net/datetime/1.4.1/js/dataTables.dateTime.min.js")
+    script(src="https://cdn.datatables.net/searchbuilder/1.4.2/js/dataTables.searchBuilder.min.js")
+    script(src="https://cdn.datatables.net/searchbuilder/1.4.2/js/searchBuilder.bootstrap5.min.js")
+    script(src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js")
+    link(rel="stylesheet", href="https://cdn.datatables.net/buttons/2.3.6/css/buttons.dataTables.min.css")
+    link(rel="stylesheet", href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css")
+
+    style.
+        #upload-status-message {
+            font-size: 1em;
+            color: #007bff;
+        }
+
+    script.
+        // Add a script to handle form submission
+        document.addEventListener("DOMContentLoaded", function () {
+            // Select the form element by its ID
+            const form = document.getElementById("search-bgc");
+
+            // Select the status message element by its ID
+            const statusMessage = document.getElementById("upload-status-message");
+
+            // Add a submit event listener
+            form.addEventListener("submit", function (event) {
+                event.preventDefault(); // Prevent the default form submission behavior
+
+                // Serialize the form data into a FormData object
+                const formData = new FormData(form);
+
+                // Display a message indicating that the upload has started
+                statusMessage.textContent = "Uploading ...";
+                statusMessage.classList.add("badge-primary");
+
+                // Send the form data using fetch and handle the response
+                fetch("/homology-search", {
+                    method: "POST",
+                    body: formData
+                })
+                    .then(response => {
+                        // Display a message indicating that the upload is complete
+                        statusMessage.textContent = "Upload complete!\nRunning analysis...";
+                        statusMessage.classList.remove("badge-primary");
+                        statusMessage.classList.add("badge-warning");
+
+                        return response.json();
+                    }) // You can parse the response as JSON if needed
+                    .then(data => {
+                        // Handle the response data here
+                        console.log(data);
+                        const tbody = document.getElementById("results-body");
+
+                        tbody.innerHTML = '';
+
+                        data.forEach(item => {
+                            const row = document.createElement("tr");
+                            row.innerHTML = `
+                                <td>${item.bgc_name}</td>
+                                <td><a href="/bgcs?gcf=${item.gcf_id}" target="_blank">${item.gcf_id}</a></td>
+                                <td>${item.membership_value}</td>
+                            `;
+                            tbody.appendChild(row);
+                        });
+
+                        document.getElementById("results").style.display = "table";
+                        statusMessage.textContent = "Analysis complete!";
+                        statusMessage.classList.remove("badge-warning");
+                        statusMessage.classList.add("badge-success");
+                    })
+                    .catch(error => {
+                        // Handle any errors that occurred during the fetch
+                        console.error("Error:", error);
+                        statusMessage.textContent = "Error!";
+                        statusMessage.classList.remove("badge-warning");
+                        statusMessage.classList.add("badge-danger");
+                    });
+            });
+        });

@@ -49,7 +49,7 @@ router.get('/search-old', (req, res) => {
 });
 
 router.get('/search', (req, res) => {
-  res.render('search2', );
+  res.render('search', );
 });
 
 router.get('/imprint', (req, res) => {
