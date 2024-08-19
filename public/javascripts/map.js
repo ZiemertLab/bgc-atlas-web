@@ -1,5 +1,5 @@
 function createMap() {
-    var map = L.map('map').setView({lon: 0, lat: 0}, 2.5);
+    const map = L.map('map').setView({lon: 0, lat: 0}, 2.5);
 
     const southWest = L.latLng(-90, -180);
     const northEast = L.latLng(90, 180);
@@ -29,7 +29,7 @@ function createMap() {
         if (xhr.status === 200) {
             const results = xhr.response;
             console.log(results.length);
-            for (var i = 0; i < results.length; i++) {
+            for (let i = 0; i < results.length; i++) {
                 if (typeof results[i].longitude === 'number' && typeof results[i].latitude === 'number') {
                     const marker = L.marker({
                         lon: parseFloat(results[i].longitude),

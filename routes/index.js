@@ -1,5 +1,5 @@
-var express = require('express');
-var router = express.Router();
+const express = require('express');
+const router = express.Router();
 const client = require('./db');
 const pug = require('pug');
 const bodyParser = require('body-parser');
@@ -7,7 +7,7 @@ const multer = require('multer'); // For handling file uploads
 const path = require('path');
 const fs = require('fs-extra');
 const { spawn } = require('child_process');
-var sitemap = require('express-sitemap');
+const sitemap = require('express-sitemap');
 
 require('dotenv').config();
 const { Pool } = require('pg');
@@ -70,7 +70,7 @@ router.get('/downloads', (req, res) => {
 });
 
 
-var map = sitemap({
+const map = sitemap({
   generate: router,
   http: 'https',
   url: process.env.APP_URL
@@ -334,7 +334,7 @@ router.get('/map-data', (req, res) => {
       'ORDER BY\n' +
       '    gd.latitude;', (err, result) => {
 
-    var rows = JSON.parse(JSON.stringify(result.rows));
+    const rows = JSON.parse(JSON.stringify(result.rows));
     console.log("rows length: " + rows.length);
     res.json(rows);
   });
@@ -347,7 +347,7 @@ router.get('/body-map-data', (req, res) => {
       'WHERE meta_key = \'body site\'\n' +
       'GROUP BY sample, meta_value;', (err, result) => {
 
-    var rows = JSON.parse(JSON.stringify(result.rows));
+    const rows = JSON.parse(JSON.stringify(result.rows));
     res.json(rows);
   });
 });
@@ -367,7 +367,7 @@ router.get('/filter/:column', (req, res) => {
       '    AND sm2.meta_key = \'geographic location (latitude)\' AND sm2.meta_value IS NOT NULL\n' +
       '    AND sm3.meta_key = \'' + req.params.column +'\' AND sm3.meta_value IS NOT NULL;\n', (err, result) => {
 
-    var rows = JSON.parse(JSON.stringify(result.rows));
+    const rows = JSON.parse(JSON.stringify(result.rows));
     res.json(rows);
   })
 });
@@ -382,7 +382,7 @@ router.get('/column-values/:column', (req, res) => {
     if(err) {
       console.log(err);
     }
-    var possibleValues = JSON.parse(JSON.stringify(result.rows));
+    const possibleValues = JSON.parse(JSON.stringify(result.rows));
     res.json(possibleValues);
   });
 });
@@ -397,7 +397,7 @@ router.get('/sample-info', (req, res) => {
     if(err){
       console.log(err);
     }
-    var sampleInfo = JSON.parse(JSON.stringify(result.rows));
+    const sampleInfo = JSON.parse(JSON.stringify(result.rows));
     res.json(sampleInfo);
   });
 });
@@ -571,7 +571,7 @@ router.get('/gcf-category-count', (req, res) => {
     if(err){
       console.log(err);
     }
-    var catInfo = JSON.parse(JSON.stringify(result.rows));
+    const catInfo = JSON.parse(JSON.stringify(result.rows));
     res.json(catInfo);
   });
 });
@@ -674,7 +674,7 @@ router.get('/gcf-count-hist', (req, res) => {
       console.log(sql);
       console.log(err);
     }
-    var bgcInfo = JSON.parse(JSON.stringify(result.rows));
+    const bgcInfo = JSON.parse(JSON.stringify(result.rows));
     res.json(bgcInfo);
   });
 });
@@ -767,37 +767,37 @@ router.get('/bgc-table', async (req, res) => {
       let value = criteria.value;
       let value1 = criteria.value1;
 
-      if(condition == '=') {
+      if(condition === '=') {
         whereClauses.push(data + ' = \'' + value + '\'');
-      } else if (condition == '!=') {
+      } else if (condition === '!=') {
         whereClauses.push(data + ' != \'' + value + '\'');
-      } else if (condition == '<') {
+      } else if (condition === '<') {
         whereClauses.push(data + ' < \'' + value + '\'');
-      } else if (condition == '>') {
+      } else if (condition === '>') {
         whereClauses.push(data + ' > \'' + value + '\'');
-      } else if (condition == '<=') {
+      } else if (condition === '<=') {
         whereClauses.push(data + ' <= \'' + value + '\'');
-      } else if (condition == '>=') {
+      } else if (condition === '>=') {
         whereClauses.push(data + ' >= \'' + value + '\'');
-      } else if (condition == 'between') {
+      } else if (condition === 'between') {
         whereClauses.push(data + ' BETWEEN \'' + value + '\' AND \'' + value1 + '\'');
-      } else if (condition == 'not between') {
+      } else if (condition === 'not between') {
         whereClauses.push(data + ' NOT BETWEEN \'' + value + '\' AND \'' + value1 + '\'');
-      } else if (condition == 'contains') {
+      } else if (condition === 'contains') {
         whereClauses.push(data + ' LIKE \'%' + value + '%\'');
-      } else if (condition == '!contains') {
+      } else if (condition === '!contains') {
         whereClauses.push(data + ' NOT LIKE \'%' + value + '%\'');
-      } else if (condition == 'starts') {
+      } else if (condition === 'starts') {
         whereClauses.push(data + ' LIKE \'' + value + '%\'');
-      } else if (condition == '!starts') {
+      } else if (condition === '!starts') {
         whereClauses.push(data + ' NOT LIKE \'' + value + '%\'');
-      } else if (condition == 'ends') {
+      } else if (condition === 'ends') {
         whereClauses.push(data + ' LIKE \'%' + value + '\'');
-      } else if (condition == '!ends') {
+      } else if (condition === '!ends') {
         whereClauses.push(data + ' NOT LIKE \'%' + value + '\'');
-      } else if (condition == 'null') {
+      } else if (condition === 'null') {
         whereClauses.push(data + ' IS NULL');
-      } else if (condition == '!null') {
+      } else if (condition === '!null') {
         whereClauses.push(data + ' IS NOT NULL');
       }
     });

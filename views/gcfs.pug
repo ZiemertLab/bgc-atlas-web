@@ -26,7 +26,7 @@ block append head
 
     link(rel="stylesheet", href="https://cdn.datatables.net/searchbuilder/1.4.2/css/searchBuilder.bootstrap5.min.css")
     link(rel="stylesheet", href="https://cdn.datatables.net/datetime/1.4.1/css/dataTables.dateTime.min.css")
-    script(href="https://cdn.datatables.net/datetime/1.4.1/js/dataTables.dateTime.min.js")
+    script(src="https://cdn.datatables.net/datetime/1.4.1/js/dataTables.dateTime.min.js")
     script(src="https://cdn.datatables.net/searchbuilder/1.4.2/js/dataTables.searchBuilder.min.js")
     script(src="https://cdn.datatables.net/searchbuilder/1.4.2/js/searchBuilder.bootstrap5.min.js")
     script(src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js")
@@ -155,7 +155,7 @@ block scripts
         plotGCFChart();
         plotGCFCountHist();
 
-        var table;
+        let table;
         $(document).ready(function () {
             table = $('#gcfTable').DataTable({
                 ajax: '/gcf-table',
@@ -180,12 +180,10 @@ block scripts
                         render: function (data, type, row) {
                             if (type === 'display') {
                                 // Find and make values within parentheses bold
-                                var formattedBiomes = data;
-
                                 // var formattedBiomes = data.replace(/\(([^)]+)\)/g, function (match, p1) {
                                 //     return '<strong>(' + p1 + ')</strong>';
                                 // });
-                                return formattedBiomes;
+                                return data;
                             } else {
                                 return data; // For other data types, return as is
                             }
@@ -200,11 +198,10 @@ block scripts
                         render: function (data, type, row) {
                             if (type === 'display') {
                                 // Find and make values within parentheses bold
-                                var formattedBiomes = data;
                                 // var formattedBiomes = data.replace(/\(([^)]+)\),/g, function (match, p1) {
                                 //     return '<strong>(' + p1 + '),</strong>';
                                 // });
-                                return formattedBiomes;
+                                return data;
                             } else {
                                 return data; // For other data types, return as is
                             }
@@ -214,9 +211,9 @@ block scripts
                 order: [[2, 'desc'], [0, 'desc']],
                 createdRow: function (row, data, dataIndex) {
                     if (data.num_regions > 0) {
-                        var biomeCell = $(row).find('td').eq(3);
+                        const biomeCell = $(row).find('td').eq(3);
                         biomeCell.html(biomeCell.html().replaceAll('root:', ''));
-                        var famNumCell = $(row).find('td').eq(0);
+                        const famNumCell = $(row).find('td').eq(0);
                         famNumCell.html('<a href="/bgcs?gcf=' + famNumCell.html() + '" target="_blank">' + famNumCell.html() + '</a>');
                     }
                 },

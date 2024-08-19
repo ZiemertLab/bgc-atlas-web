@@ -47,9 +47,9 @@ script.
         xhr.onload = function () {
             if (xhr.status === 200) {
                 const results = xhr.response;
-                var giCount = 0;
-                var digestCount = 0;
-                for (var i = 0; i < results.length; i++) {
+                let giCount = 0;
+                let digestCount = 0;
+                for (let i = 0; i < results.length; i++) {
                     if (typeof results[i].sample === 'string' && typeof results[i].meta_value === 'string') {
                         if(results[i].meta_value === 'UBERON:feces' || results[i].meta_value === 'Distal gut content'
                             || results[i].meta_value === 'Caecum content' || results[i].meta_value === 'Ileum content') {

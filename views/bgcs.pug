@@ -63,7 +63,7 @@ block append head
     script(src="https://cdn.datatables.net/datetime/1.4.1/js/dataTables.dateTime.min.js")
 
     // Scripts for Chart.js, Leaflet, and Vega
-    script(src='https://cdn.jsdelivr.net/npm/chart.js', sourcemaps="false")
+    script(src='https://cdn.jsdelivr.net/npm/chart.js')
     script(src='https://unpkg.com/leaflet@1.9.3/dist/leaflet.js')
     script(src='https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js')
     script(src="https://cdn.jsdelivr.net/npm/vega@5.27.0")
@@ -224,7 +224,7 @@ block scripts
         createSunburstView('#sunburst-chart')
 
         $(document).ready(function () {
-            var table;
+            let table;
             table = $('#bgcTable').DataTable({
                 "processing": true, // Enable processing indicator
                 "serverSide": true, // Enable server-side processing
@@ -269,7 +269,7 @@ block scripts
                     {data: 'longest_biome', name: 'Biome', title: 'Biome', type: 'string'},
                     {data: null, name: 'Length', title: 'Length', type: 'num',
                         render: function (data, type, row) {
-                            var length = row.end - row.start + 1;;
+                            const length = row.end - row.start + 1;;
                             return length;
                         }
                     },
@@ -290,22 +290,22 @@ block scripts
                 ],
                 createdRow: function (row, data, dataIndex) {
                     if (data.region_id > 0) {
-                        var rowNumCell = $(row).find('td').eq(0);
-                        var rowNum = rowNumCell.html();
-                        var paddedRowNum = rowNum.padStart(9, '0');
+                        const rowNumCell = $(row).find('td').eq(0);
+                        const rowNum = rowNumCell.html();
+                        const paddedRowNum = rowNum.padStart(9, '0');
                         rowNumCell.html("BGC_" + paddedRowNum);
-                        var biomeCell = $(row).find('td').eq(4);
+                        const biomeCell = $(row).find('td').eq(4);
                         biomeCell.html(biomeCell.html().replaceAll('root:', ''));
-                        var assemblyCell = $(row).find('td').eq(1);
-                        var assemblyID = assemblyCell.html();
+                        const assemblyCell = $(row).find('td').eq(1);
+                        const assemblyID = assemblyCell.html();
                         assemblyCell.html('<a href="https://bgc-atlas.cs.uni-tuebingen.de/antismash?dataset=' + assemblyCell.html() + '" target="_blank">' + assemblyCell.html() + '</a>');
 
                         // assemblyCell.html('<a href="https://bgc-atlas.ziemertlab.com/datasets/' + assemblyCell.html() + '/antismash/index.html" target="_blank">' + assemblyCell.html() + '</a>');
-                        var bgcCell = $(row).find('td').eq(0);
+                        const bgcCell = $(row).find('td').eq(0);
                         bgcCell.html('<a href="https://bgc-atlas.cs.uni-tuebingen.de/antismash?dataset=' + assemblyID + '&anchor=' + data.anchor + '" target="_blank">' + bgcCell.html() + '</a>');
 
                         //bgcCell.html('<a href="https://bgc-atlas.ziemertlab.com/datasets/' + data.assembly + '/antismash/index.html#' + data.anchor + '" target="_blank">' + bgcCell.html() + '</a>');
-                        var gcfCell = $(row).find('td').eq(6);
+                        const gcfCell = $(row).find('td').eq(6);
                         gcfCell.html('<a href="/bgcs?gcf=' + gcfCell.html() + '" target="_blank">' + gcfCell.html() + '</a>');
                     }
                 },
@@ -319,17 +319,17 @@ block scripts
         });
 
         function downloadTableDataAsJson() {
-            var data = [];
+            const data = [];
             $('#bgcTable').DataTable().rows().every(function() {
-                var row = $(this.node());
-                var rowData = {};
+                const row = $(this.node());
+                const rowData = {};
                 row.find('td').each(function(index) {
-                    var cell = $(this);
-                    var cellData = cell.text(); // Get the cell text
-                    var headerText = $('#bgcTable').DataTable().column(index).header().innerText;
+                    const cell = $(this);
+                    const cellData = cell.text(); // Get the cell text
+                    const headerText = $('#bgcTable').DataTable().column(index).header().innerText;
                     rowData[headerText] = cellData;
                     // If the cell contains a hyperlink, extract the href value
-                    var href = cell.find('a').attr('href');
+                    const href = cell.find('a').attr('href');
                     if (href && href.startsWith('https')) {
                         rowData[headerText + ' Link'] = href; // Add a new key-value pair for the href
                     }
@@ -338,21 +338,20 @@ block scripts
             });
 
             // Convert the data to a JSON string
-            var json = JSON.stringify(data, null, 2);
+            const json = JSON.stringify(data, null, 2);
 
             // Create a blob from the JSON string
-            var blob = new Blob([json], {type: "application/json"});
+            const blob = new Blob([json], {type: "application/json"});
 
             // Create a link to download the blob
-            var url = URL.createObjectURL(blob);
-            var a = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
             a.href = url;
 
             // Determine the filename based on the gcf value
-            var params = new URLSearchParams(window.location.search);
-            var gcf = params.get('gcf');
-            var filename = gcf ? 'GCF_' + gcf + '.json' : 'all_bgcs.json';
-            a.download = filename;
+            const params = new URLSearchParams(window.location.search);
+            const gcf = params.get('gcf');
+            a.download = gcf ? 'GCF_' + gcf + '.json' : 'all_bgcs.json';
 
             a.click();
         }

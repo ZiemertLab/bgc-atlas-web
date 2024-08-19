@@ -1,9 +1,9 @@
 $(document).ready(function () {
-    var image = $('img');
-    var selectedItems = []
+    const image = $('img');
+    const selectedItems = [];
     $('#selections').html( selectedItems.length>0 ?"<b>Selected body Parts: </b>"+ selectedItems : "<b>Please select a body part</b>" );
 
-    var defaultDipTooltip = '<b><u>Spine</u></b>';
+    const defaultDipTooltip = '<b><u>Spine</u></b>';
 
     image.mapster(
         {
@@ -18,7 +18,7 @@ $(document).ready(function () {
             mapKey: 'name',
             listKey: 'key',
             onClick: function (e) {
-                var newToolTip = defaultDipTooltip;
+                const newToolTip = defaultDipTooltip;
                 if($.inArray(e.key,selectedItems) >= 0){
                     selectedItems.splice($.inArray(e.key, selectedItems),1);
                 }else{

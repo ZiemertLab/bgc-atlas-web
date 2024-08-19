@@ -1,5 +1,5 @@
 function createMapGCF() {
-    var map = L.map('map').setView({lon: 0, lat: 0}, 2.5);
+    const map = L.map('map').setView({lon: 0, lat: 0}, 2.5);
 
     const southWest = L.latLng(-90, -180);
     const northEast = L.latLng(90, 180);
@@ -42,7 +42,7 @@ function createMapGCF() {
     xhr.onload = function () {
         if (xhr.status === 200) {
             const results = xhr.response;
-            for (var i = 0; i < results.length; i++) {
+            for (let i = 0; i < results.length; i++) {
                 if (typeof results[i].longitude === 'string' && typeof results[i].latitude === 'string') {
                     const marker = L.marker({
                         lon: parseFloat(results[i].longitude),

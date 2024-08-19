@@ -11,7 +11,7 @@ append head
 
     link(rel="stylesheet", href="https://cdn.datatables.net/searchbuilder/1.4.2/css/searchBuilder.bootstrap5.min.css")
     link(rel="stylesheet", href="https://cdn.datatables.net/datetime/1.4.1/css/dataTables.dateTime.min.css")
-    script(href="https://cdn.datatables.net/datetime/1.4.1/js/dataTables.dateTime.min.js")
+    script(src="https://cdn.datatables.net/datetime/1.4.1/js/dataTables.dateTime.min.js")
     script(src="https://cdn.datatables.net/searchbuilder/1.4.2/js/dataTables.searchBuilder.min.js")
     script(src="https://cdn.datatables.net/searchbuilder/1.4.2/js/searchBuilder.bootstrap5.min.js")
     script(src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js")
@@ -48,7 +48,7 @@ append head
 
 
     script.
-        var table;
+        let table;
         $(document).ready(function () {
             table = $('#samplesTable').DataTable({
                 ajax: '/sample-data',
@@ -82,14 +82,14 @@ append head
                 order: [[0, 'desc'], [4, 'desc']],
                 createdRow: function (row, data, dataIndex) {
                     if (data.status === 'success') {
-                        var statusCell = $(row).find('td').eq(0);
-                        var assemblyCell = $(row).find('td').eq(2);
+                        const statusCell = $(row).find('td').eq(0);
+                        const assemblyCell = $(row).find('td').eq(2);
                         statusCell.addClass('status-cell');
                         statusCell.html('<a href="/AS/' + assemblyCell.html() + '" target="_blank"> <img src="/images/antismash_logo.svg" alt="View AS Results" class="status-image"> </a>')
                         // statusCell.html('<a href="/AS/' + assemblyCell.html() + '" target="_blank"> View AS Results</a>')
-                        var biomeCell = $(row).find('td').eq(3);
+                        const biomeCell = $(row).find('td').eq(3);
                         biomeCell.html(biomeCell.html().replace('root:', ''));
-                        var sampleCell = $(row).find('td').eq(1);
+                        const sampleCell = $(row).find('td').eq(1);
                         sampleCell.html('<a href="https://www.ebi.ac.uk/metagenomics/samples/' + sampleCell.html() + '" target="_blank">' + sampleCell.html() + '</a>');
                         assemblyCell.html('<a href="https://www.ebi.ac.uk/metagenomics/analyses/' + assemblyCell.html() + '" target="_blank">' + assemblyCell.html() + '</a>')
                     }
