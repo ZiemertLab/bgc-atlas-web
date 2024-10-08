@@ -1,5 +1,5 @@
 function createMapGCF() {
-    const map = L.map('map').setView({lon: 0, lat: 0}, 2.5);
+    var map = L.map('map').setView({lon: 0, lat: 0}, 2.5);
 
     const southWest = L.latLng(-90, -180);
     const northEast = L.latLng(90, 180);
@@ -16,14 +16,30 @@ function createMapGCF() {
         maxZoom: 9,
         attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap contributors</a>',
     }).addTo(map);
+
     // show the scale bar on the lower left corner
     L.control.scale({imperial: true, metric: true}).addTo(map);
 
-    // Get the gcf query parameter from the URL
-    const gcf = window.location.search.split('=')[1];
+    // Parse the URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
 
-    // Include the gcf query parameter in the request URL
-    const url = gcf ? `/map-data-gcf?gcf=${gcf}` : '/map-data-gcf';
+    // Get the gcf and samples query parameters
+    const gcf = urlParams.get('gcf');
+    const samples = urlParams.get('samples');
+
+    // Construct the base URL
+    let url = '/map-data-gcf';
+
+    // Append query parameters if they exist
+    if (gcf || samples) {
+        url += '?';
+        if (gcf) {
+            url += `gcf=${gcf}`;
+        }
+        if (samples) {
+            url += gcf ? `&samples=${samples}` : `samples=${samples}`;
+        }
+    }
 
     const xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
@@ -42,7 +58,7 @@ function createMapGCF() {
     xhr.onload = function () {
         if (xhr.status === 200) {
             const results = xhr.response;
-            for (let i = 0; i < results.length; i++) {
+            for (var i = 0; i < results.length; i++) {
                 if (typeof results[i].longitude === 'string' && typeof results[i].latitude === 'string') {
                     const marker = L.marker({
                         lon: parseFloat(results[i].longitude),
@@ -70,6 +86,5 @@ function createMapGCF() {
     };
 
     map.addLayer(markers);
-
     xhr.send();
 }

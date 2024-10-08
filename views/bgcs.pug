@@ -16,6 +16,20 @@ block content
                                     td(style="text-align: left;")
                                         span.badge.badge-primary#bgc-count Loading...
                                 tr
+                                    td(style="text-align: left;") Core BGCs
+                                        span.info-icon(data-bs-toggle="tooltip" title="Core BGCs are those that are annotated as complete by antiSMASH and used to construct the initial clustering of BGCs into GCFs.")
+                                            img(src="/images/info.svg" width="16" height="16" alt="Info")
+                                    td(style="text-align: left;") :
+                                    td(style="text-align: left;")
+                                        span.badge.badge-primary#core-count Loading...
+                                tr
+                                    td(style="text-align: left;") Non-Putative BGCs
+                                        span.info-icon(data-bs-toggle="tooltip" title="Non-putative BGCs are those that have a membership value less than 0.4 to their assigned GCF.")
+                                            img(src="/images/info.svg" width="16" height="16" alt="Info")
+                                    td(style="text-align: left;") :
+                                    td(style="text-align: left;")
+                                        span.badge.badge-primary#non-putative-count Loading...
+                                tr
                                     td(style="text-align: left;") Mean #BGC per sample
                                     td(style="text-align: left;") :
                                     td(style="text-align: left;")
@@ -36,6 +50,18 @@ block content
                 .row
                     h2 BGC Table
                     .col-md-12
+                        div.mb-3
+                            div.form-check.form-check-inline
+                                input.form-check-input.checkbox-custom(type="checkbox" id="showCoreMembers" name="showCoreMembers")
+                                label.form-check-label(for="showCoreMembers") Show only core members
+                                span.info-icon(data-bs-toggle="tooltip" title="Core BGCs are those that are annotated as complete by antiSMASH and used to construct the initial clustering of BGCs into GCFs.")
+                                    img(src="/images/info.svg" width="12" height="12" alt="Info")
+                            div.form-check.form-check-inline.ms-3
+                                input.form-check-input.checkbox-custom(type="checkbox" id="showNonPutativeMembers" name="showNonPutativeMembers")
+                                label.form-check-label(for="showNonPutativeMembers") Show only non-putative members
+                                span.info-icon(data-bs-toggle="tooltip" title="Non-putative BGCs are those that have a membership value less than 0.4 to their assigned GCF.")
+                                    img(src="/images/info.svg" width="12" height="12" alt="Info")
+
                         table#bgcTable(style="width:100%;", class="stripe")
 
 
@@ -63,10 +89,12 @@ block append head
     script(src="https://cdn.datatables.net/datetime/1.4.1/js/dataTables.dateTime.min.js")
 
     // Scripts for Chart.js, Leaflet, and Vega
-    script(src='https://cdn.jsdelivr.net/npm/chart.js')
+    script(src='https://cdn.jsdelivr.net/npm/chart.js', sourcemaps="false")
     script(src='https://unpkg.com/leaflet@1.9.3/dist/leaflet.js')
     script(src='https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js')
     script(src="https://cdn.jsdelivr.net/npm/vega@5.27.0")
+
+    script(src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js")
 
     // Scripts for custom JavaScript
     script(src="/javascripts/sunburst.js")
@@ -84,14 +112,59 @@ block append head
             background-color: #ffcccb !important;
         }
 
+        .checkbox-custom {
+            width: 20px; /* Adjust size if needed */
+            height: 20px; /* Adjust size if needed */
+            border: 2px solid #007bff; /* Add border color */
+            border-radius: 3px; /* Optional: make the corners slightly rounded */
+            appearance: none; /* Remove default checkbox styling */
+            outline: none; /* Remove any outline on focus */
+            cursor: pointer; /* Change cursor to pointer for better UX */
+        }
+
+        .checkbox-custom:checked {
+            background-color: #007bff; /* Background color when checked */
+            border-color: #007bff; /* Match border color when checked */
+            box-shadow: 0 0 2px #007bff; /* Add slight shadow effect on check */
+            position: relative;
+        }
+
+        .checkbox-custom:checked::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 6px;
+            width: 4px;
+            height: 8px;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+
+        .info-icon {
+            cursor: pointer;
+            font-size: 12px;
+            color: #007bff;
+            margin-left: 5px;
+        }
+
+        .info-icon:hover {
+            color: #0056b3;
+        }
+
+
 block scripts
     script.
         function getInfo() {
-            // Get the gcf query parameter from the URL
-            const gcf = window.location.search.split('=')[1];
+            const urlParams = new URLSearchParams(window.location.search);
+            const gcf = urlParams.get('gcf');
+            const samples = urlParams.get('samples');
 
-            // Include the gcf query parameter in the request URL
-            const url = gcf ? `/bgc-info?gcf=${gcf}` : '/bgc-info';
+            // Update the request URL to include both gcf and samples
+            let url = gcf ? `/bgc-info?gcf=${gcf}` : '/bgc-info';
+            if (samples) {
+                url += `?samples=${samples}`;
+            }
 
             const xhr = new XMLHttpRequest();
             xhr.open('GET', url, true);
@@ -100,23 +173,43 @@ block scripts
             xhr.onload = function () {
                 if (xhr.status === 200) {
                     const results = xhr.response;
+                    console.log(results);
+
                     document.getElementById("bgc-count").innerHTML = Number(results[0].bgc_count).toLocaleString();
                     document.getElementById("meanbgcsamples").innerHTML = results[0].meanbgcsamples;
+                    document.getElementById("core-count").innerHTML = Number(results[0].core_count).toLocaleString();
+                    document.getElementById("non-putative-count").innerHTML = Number(results[0].non_putative_count).toLocaleString();
 
-                    // Set the header text
-                    const header = document.querySelector('h1'); // replace 'h1' with the selector for your header
+                    // Update the header
+                    const header = document.querySelector('h1');
                     header.innerHTML = gcf ? `GCF ${gcf}` : 'BGC Overview';
                 }
             }
-            xhr.send()
+            xhr.send();
         }
 
         function plotProdChart() {
-            // Get the gcf query parameter from the URL
-            const gcf = window.location.search.split('=')[1];
+            // Parse the URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
 
-            // Include the gcf query parameter in the request URL
-            const url = gcf ? `/pc-product-count?gcf=${gcf}` : '/pc-product-count';
+            // Get the gcf and samples query parameters
+            const gcf = urlParams.get('gcf');
+            const samples = urlParams.get('samples');
+
+            // Construct the base URL
+            let url = '/pc-product-count';
+
+            // Append query parameters if they exist
+            if (gcf || samples) {
+                url += '?';
+                if (gcf) {
+                    url += `gcf=${gcf}`;
+                }
+                if (samples) {
+                    // Append '&' if gcf already exists
+                    url += gcf ? `&samples=${samples}` : `samples=${samples}`;
+                }
+            }
 
             const xhr = new XMLHttpRequest();
             xhr.open('GET', url, true);
@@ -127,8 +220,6 @@ block scripts
                     const results = xhr.response;
                     const labels = results.map((row) => row.prod);
                     const data = results.map((row) => row.count);
-
-                    console.log("labels: " + labels)
 
                     const canvas = document.getElementById('product-chart');
                     const ctx = canvas.getContext('2d');
@@ -168,11 +259,27 @@ block scripts
         }
 
         function plotChart() {
-            // Get the gcf query parameter from the URL
-            const gcf = window.location.search.split('=')[1];
+            // Parse the URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
 
-            // Include the gcf query parameter in the request URL
-            const url = gcf ? `/pc-category-count?gcf=${gcf}` : '/pc-category-count';
+            // Get the gcf and samples query parameters
+            const gcf = urlParams.get('gcf');
+            const samples = urlParams.get('samples');
+
+            // Construct the base URL
+            let url = '/pc-category-count';
+
+            // Append query parameters if they exist
+            if (gcf || samples) {
+                url += '?';
+                if (gcf) {
+                    url += `gcf=${gcf}`;
+                }
+                if (samples) {
+                    // Append '&' if gcf already exists
+                    url += gcf ? `&samples=${samples}` : `samples=${samples}`;
+                }
+            }
 
             const xhr = new XMLHttpRequest();
             xhr.open('GET', url, true);
@@ -183,8 +290,6 @@ block scripts
                     const results = xhr.response;
                     const labels = results.map((row) => row.categories);
                     const data = results.map((row) => row.count);
-
-                    console.log("labels: " + labels)
 
                     const canvas = document.getElementById('category-chart');
                     const ctx = canvas.getContext('2d');
@@ -223,58 +328,87 @@ block scripts
         createMapGCF();
         createSunburstView('#sunburst-chart')
 
-        $(document).ready(function () {
-            let table;
-            table = $('#bgcTable').DataTable({
-                "processing": true, // Enable processing indicator
-                "serverSide": true, // Enable server-side processing
+        function drawTable() {
+            var table = $('#bgcTable').DataTable({
+                "processing": true,
+                "serverSide": true,
                 "ajax": {
                     "url": '/bgc-table',
                     "data": function (d) {
                         const urlParams = new URLSearchParams(window.location.search);
                         const gcfVal = urlParams.get('gcf');
                         if (gcfVal) {
-                            d.gcf = gcfVal; // Pass additional parameters to server
+                            d.gcf = gcfVal;
                         }
+                        const samplesVal = urlParams.get('samples');
+                        if (samplesVal) {
+                            d.samples = samplesVal;
+                        }
+                        d.showCoreMembers = $('#showCoreMembers').is(':checked');
+                        d.showNonPutativeMembers = $('#showNonPutativeMembers').is(':checked');
                     }
                 },
-                "lengthMenu": [[10, 25, 100, 500, 1000], [10, 25, 100, 500, 1000]],
                 "pageLength": 10,
+                "lengthMenu": [[10, 25, 100, 500, 1000], [10, 25, 100, 500, 1000]],
+                "paging": true,
                 "scrollCollapse": true,
-                language: {
-                    searchBuilder: {
-                        button: 'Filter',
+                "dom": 'Bflriptip',
+                "drawCallback": function (settings) {
+                    // Append the custom input box and Go button after pagination is redrawn
+                    if (!$('#custom-page-input').length) {
+                        $('#bgcTable_paginate').append(
+                            '<div style="display: inline-flex; align-items: center; margin-left: 10px;">' +
+                            '<input id="custom-page-input" type="text" placeholder="Page" style="width: 60px; text-align: center; margin-right: 5px;" />' +
+                            '<button id="custom-page-go" class="btn btn-primary btn-sm" style="height: 30px;">Go</button>' +
+                            '</div>'
+                        );
                     }
-                },
-                searchBuilder: {
-                    searchOnChange: false,
-                },
-                buttons: [
-                    'searchBuilder',
-                    'csv',
-                    {
-                        text: 'JSON',
-                        action: function ( e, dt, node, config ) {
-                            downloadTableDataAsJson();
+
+                    // Update the input box with the current page number
+                    var currentPage = table.page.info().page + 1; // DataTables uses zero-based page index
+                    $('#custom-page-input').val(currentPage);
+
+                    // Re-bind the click event for the Go button after each redraw
+                    $('#custom-page-go').off('click').on('click', function () {
+                        goToPage();
+                    });
+
+                    // Handle the Enter key press to trigger the page change
+                    $('#custom-page-input').off('keypress').on('keypress', function (e) {
+                        if (e.which == 13) { // Enter key code is 13
+                            goToPage();
+                        }
+                    });
+
+                    // Function to go to the specified page
+                    function goToPage() {
+                        var pageNum = parseInt($('#custom-page-input').val(), 10);
+                        var totalPages = table.page.info().pages;
+
+                        if (!isNaN(pageNum) && pageNum > 0 && pageNum <= totalPages) {
+                            table.page(pageNum - 1).draw('page');
+                        } else {
+                            alert('Invalid page number');
                         }
                     }
-                ],
-                "searching": false,
-                dom: 'Bflriptip',
+                },
                 columns: [
                     {data: 'region_id', name: 'BGC ID', title: 'BGC ID', type: 'num'},
                     {data: 'assembly', name: 'Assembly', title: 'Assembly', type: 'string'},
                     {data: 'product_categories', name: 'Category', title: 'Category', type: 'string'},
                     {data: 'products', name: 'Product', title: 'Product', type: 'string'},
                     {data: 'longest_biome', name: 'Biome', title: 'Biome', type: 'string'},
-                    {data: null, name: 'Length', title: 'Length', type: 'num',
+                    {
+                        data: null, name: 'Length', title: 'Length', type: 'num',
                         render: function (data, type, row) {
-                            const length = row.end - row.start + 1;;
+                            var length = row.end - row.start + 1;
+                            ;
                             return length;
                         }
                     },
                     {data: 'bigslice_gcf_id', name: 'GCF', title: 'GCF', type: 'string'},
-                    {data: 'membership_value', name: 'Membership Value', title: 'Membership Value', type: 'num',
+                    {
+                        data: 'membership_value', name: 'Membership Value', title: 'Membership Value', type: 'num',
                         render: function (data, type, row) {
                             // Ensure data is numeric and not null
                             if (type === 'display' && !isNaN(data) && data !== null) {
@@ -284,52 +418,149 @@ block scripts
                             return data;
                         }
                     },
+                    {
+                        data: 'gcf_from_search', name: 'Core', title: 'Core', type: 'boolean',
+                        render: function (data, type, row, meta) {
+                            return !data; // Negate the value here
+                        }
+                    },
                     {data: 'contig_edge', name: 'Contig Edge', title: 'Contig Edge', type: 'boolean'},
                     {data: 'contig_name', name: 'Contig', title: 'Contig', type: 'string'},
                     {data: 'region_num', name: 'Region#', title: 'Region#', type: 'string'},
                 ],
                 createdRow: function (row, data, dataIndex) {
                     if (data.region_id > 0) {
-                        const rowNumCell = $(row).find('td').eq(0);
-                        const rowNum = rowNumCell.html();
-                        const paddedRowNum = rowNum.padStart(9, '0');
+                        var rowNumCell = $(row).find('td').eq(0);
+                        var rowNum = rowNumCell.html();
+                        var paddedRowNum = rowNum.padStart(9, '0');
                         rowNumCell.html("BGC_" + paddedRowNum);
-                        const biomeCell = $(row).find('td').eq(4);
+                        var biomeCell = $(row).find('td').eq(4);
                         biomeCell.html(biomeCell.html().replaceAll('root:', ''));
-                        const assemblyCell = $(row).find('td').eq(1);
-                        const assemblyID = assemblyCell.html();
+                        var assemblyCell = $(row).find('td').eq(1);
+                        var assemblyID = assemblyCell.html();
                         assemblyCell.html('<a href="https://bgc-atlas.cs.uni-tuebingen.de/antismash?dataset=' + assemblyCell.html() + '" target="_blank">' + assemblyCell.html() + '</a>');
 
                         // assemblyCell.html('<a href="https://bgc-atlas.ziemertlab.com/datasets/' + assemblyCell.html() + '/antismash/index.html" target="_blank">' + assemblyCell.html() + '</a>');
-                        const bgcCell = $(row).find('td').eq(0);
+                        var bgcCell = $(row).find('td').eq(0);
                         bgcCell.html('<a href="https://bgc-atlas.cs.uni-tuebingen.de/antismash?dataset=' + assemblyID + '&anchor=' + data.anchor + '" target="_blank">' + bgcCell.html() + '</a>');
 
                         //bgcCell.html('<a href="https://bgc-atlas.ziemertlab.com/datasets/' + data.assembly + '/antismash/index.html#' + data.anchor + '" target="_blank">' + bgcCell.html() + '</a>');
-                        const gcfCell = $(row).find('td').eq(6);
+                        var gcfCell = $(row).find('td').eq(6);
                         gcfCell.html('<a href="/bgcs?gcf=' + gcfCell.html() + '" target="_blank">' + gcfCell.html() + '</a>');
                     }
                 },
-                rowCallback: function(row,data) {
-                    if(parseFloat(data.membership_value) > 0.405) {
+                rowCallback: function (row, data) {
+                    if (parseFloat(data.membership_value) > 0.405) {
                         $(row).addClass('putative-bgc');
                     }
                 },
+                headerCallback: function (thead, data, start, end, display) {
+                    $(thead).find('th').eq(0).html(`
+                                Region ID
+                                <span class="info-icon" data-bs-toggle="tooltip" title="Unique identifier for the region. Clicking this opens the antiSMASH viewer for this specific region.">
+                                    <img src="/images/info.svg" width="12" height="12" alt="Info" />
+                                </span>
+                            `);
+                    $(thead).find('th').eq(1).html(`
+                                Assembly
+                                <span class="info-icon" data-bs-toggle="tooltip" title="MGnify Assembly identifier. Clicking this opens the antiSMASH viewer for the assembly.">
+                                    <img src="/images/info.svg" width="12" height="12" alt="Info" />
+                                </span>
+                            `);
+                    $(thead).find('th').eq(2).html(`
+                                Product Category
+                                <span class="info-icon" data-bs-toggle="tooltip" title="Product category of the BGC.">
+                                    <img src="/images/info.svg" width="12" height="12" alt="Info" />
+                                </span>
+                            `);
+                    $(thead).find('th').eq(3).html(`
+                                Product
+                                <span class="info-icon" data-bs-toggle="tooltip" title="Product type of the BGC.">
+                                    <img src="/images/info.svg" width="12" height="12" alt="Info" />
+                                </span>
+                            `);
+                    $(thead).find('th').eq(4).html(`
+                                Biome
+                                <span class="info-icon" data-bs-toggle="tooltip" title="Biome annotation of the sample.">
+                                    <img src="/images/info.svg" width="12" height="12" alt="Info" />
+                                </span>
+                            `);
+                    $(thead).find('th').eq(5).html(`
+                                Length
+                                <span class="info-icon" data-bs-toggle="tooltip" title="Length of the BGC.">
+                                    <img src="/images/info.svg" width="12" height="12" alt="Info" />
+                                </span>
+                            `);
+                    $(thead).find('th').eq(6).html(`
+                                GCF
+                                <span class="info-icon" data-bs-toggle="tooltip" title="GCF identifier. Clicking this opens the GCF page.">
+                                    <img src="/images/info.svg" width="12" height="12" alt="Info" />
+                                </span>
+                            `);
+                    $(thead).find('th').eq(7).html(`
+                                Membership Value
+                                <span class="info-icon" data-bs-toggle="tooltip" title="Membership value of the BGC to its assigned GCF. Values above 0.4 mean that the BGC is a putative member of the GCF.">
+                                    <img src="/images/info.svg" width="12" height="12" alt="Info" />
+                                </span>
+                            `);
+                    $(thead).find('th').eq(8).html(`
+                                Core
+                                <span class="info-icon" data-bs-toggle="tooltip" title="Core BGCs are those that are annotated as complete by antiSMASH and used to construct the initial clustering of BGCs into GCFs.">
+                                    <img src="/images/info.svg" width="12" height="12" alt="Info" />
+                                </span>
+                            `);
+                    $(thead).find('th').eq(9).html(`
+                                Contig Edge
+                                <span class="info-icon" data-bs-toggle="tooltip" title="Indicates whether the BGC is located at the edge of a contig.">
+                                    <img src="/images/info.svg" width="12" height="12" alt="Info" />
+                                </span>
+                            `);
+                    $(thead).find('th').eq(10).html(`
+                                Contig
+                                <span class="info-icon" data-bs-toggle="tooltip" title="Name of the contig where the BGC is located.">
+                                    <img src="/images/info.svg" width="12" height="12" alt="Info" />
+                                </span>
+                            `);
+                    $(thead).find('th').eq(11).html(`
+                                Region#
+                                <span class="info-icon" data-bs-toggle="tooltip" title="Region number of the BGC.">
+                                    <img src="/images/info.svg" width="12" height="12" alt="Info" />
+                                </span>
+                            `);
+                },
                 deferRender: true
+            });
+            return table;
+        }
+
+        $(document).ready(function () {
+            var table = drawTable();
+
+            document.getElementById('showCoreMembers').addEventListener('change', function() {
+                $('#bgcTable').DataTable().ajax.reload();
+            });
+
+            document.getElementById('showNonPutativeMembers').addEventListener('change', function() {
+                $('#bgcTable').DataTable().ajax.reload();
+            });
+
+            $('#bgcTable').on('draw.dt', function () {
+                $('[data-bs-toggle="tooltip"]').tooltip(); // Activate Bootstrap tooltips
             });
         });
 
         function downloadTableDataAsJson() {
-            const data = [];
+            var data = [];
             $('#bgcTable').DataTable().rows().every(function() {
-                const row = $(this.node());
-                const rowData = {};
+                var row = $(this.node());
+                var rowData = {};
                 row.find('td').each(function(index) {
-                    const cell = $(this);
-                    const cellData = cell.text(); // Get the cell text
-                    const headerText = $('#bgcTable').DataTable().column(index).header().innerText;
+                    var cell = $(this);
+                    var cellData = cell.text(); // Get the cell text
+                    var headerText = $('#bgcTable').DataTable().column(index).header().innerText;
                     rowData[headerText] = cellData;
                     // If the cell contains a hyperlink, extract the href value
-                    const href = cell.find('a').attr('href');
+                    var href = cell.find('a').attr('href');
                     if (href && href.startsWith('https')) {
                         rowData[headerText + ' Link'] = href; // Add a new key-value pair for the href
                     }
@@ -338,20 +569,21 @@ block scripts
             });
 
             // Convert the data to a JSON string
-            const json = JSON.stringify(data, null, 2);
+            var json = JSON.stringify(data, null, 2);
 
             // Create a blob from the JSON string
-            const blob = new Blob([json], {type: "application/json"});
+            var blob = new Blob([json], {type: "application/json"});
 
             // Create a link to download the blob
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
             a.href = url;
 
             // Determine the filename based on the gcf value
-            const params = new URLSearchParams(window.location.search);
-            const gcf = params.get('gcf');
-            a.download = gcf ? 'GCF_' + gcf + '.json' : 'all_bgcs.json';
+            var params = new URLSearchParams(window.location.search);
+            var gcf = params.get('gcf');
+            var filename = gcf ? 'GCF_' + gcf + '.json' : 'all_bgcs.json';
+            a.download = filename;
 
             a.click();
         }

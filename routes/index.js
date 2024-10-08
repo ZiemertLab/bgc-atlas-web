@@ -1,5 +1,5 @@
-const express = require('express');
-const router = express.Router();
+var express = require('express');
+var router = express.Router();
 const client = require('./db');
 const pug = require('pug');
 const bodyParser = require('body-parser');
@@ -7,7 +7,7 @@ const multer = require('multer'); // For handling file uploads
 const path = require('path');
 const fs = require('fs-extra');
 const { spawn } = require('child_process');
-const sitemap = require('express-sitemap');
+var sitemap = require('express-sitemap');
 
 require('dotenv').config();
 const { Pool } = require('pg');
@@ -49,7 +49,7 @@ router.get('/search-old', (req, res) => {
 });
 
 router.get('/search', (req, res) => {
-  res.render('search', );
+  res.render('search2', );
 });
 
 router.get('/imprint', (req, res) => {
@@ -69,8 +69,12 @@ router.get('/downloads', (req, res) => {
   res.render('downloads', );
 });
 
+router.get('/about', (req, res) => {
+  res.render('about', );
+});
 
-const map = sitemap({
+
+var map = sitemap({
   generate: router,
   http: 'https',
   url: process.env.APP_URL
@@ -212,8 +216,6 @@ router.post('/upload', (req, res) => {
   });
 });
 
-
-
 router.get('/sitemap.xml', function (req,res) {
   map.XMLtoWeb(res);
 }).get('/robots.txt', function (req, res) {
@@ -221,7 +223,6 @@ router.get('/sitemap.xml', function (req,res) {
 });
 
 //EXPERIMENTAL
-
 
 router.get('/body', (req, res) => {
   res.render('body', );
@@ -235,74 +236,96 @@ router.get('/test', (req, res) => {
 router.get('/map-data-gcf', (req, res) => {
   let sql = `
     SELECT
-        sample,
-        MAX(CASE WHEN meta_key = 'geographic location (longitude)' THEN meta_value END) AS longitude,
-        MAX(CASE WHEN meta_key = 'geographic location (latitude)' THEN meta_value END) AS latitude
+      sm.sample,
+      MAX(CASE WHEN sm.meta_key = 'geographic location (longitude)' THEN sm.meta_value END) AS longitude,
+      MAX(CASE WHEN sm.meta_key = 'geographic location (latitude)' THEN sm.meta_value END) AS latitude
     FROM
-        sample_metadata
+      sample_metadata sm
+        JOIN
+      mgnify_asms ma ON ma.sampleacc = sm.sample
     WHERE
-        meta_key IN ('geographic location (longitude)', 'geographic location (latitude)')
-        AND meta_value IS NOT NULL
+      sm.meta_key IN ('geographic location (longitude)', 'geographic location (latitude)')
+      AND sm.meta_value IS NOT NULL
+  `;
+
+  let filters = [];
+
+  // Handle the gcf query parameter
+  if (req.query.gcf) {
+    let bigslice_gcf_id = parseInt(req.query.gcf, 10);
+    if (isNaN(bigslice_gcf_id)) {
+      return res.status(400).json({ error: 'Invalid gcf parameter' });
+    }
+
+    filters.push(`ma.assembly IN (
+            SELECT
+                assembly
+            FROM
+                regions
+            WHERE
+                bigslice_gcf_id = ${bigslice_gcf_id}
+        )`);
+  }
+
+  // Handle the samples query parameter
+  if (req.query.samples) {
+    let samples = req.query.samples.split(',').map(sample => `'${sample.trim()}'`).join(', ');
+    filters.push(`ma.assembly IN (${samples})`);
+  }
+
+  // If there are any filters, apply them to the SQL query
+  if (filters.length > 0) {
+    sql += ` AND ${filters.join(' AND ')}`;
+  }
+
+  sql += `
     GROUP BY
-        sample
+        sm.sample
     ORDER BY
         latitude
   `;
 
-  let params = [];
-  // If the gcf query parameter is provided, modify the SQL query
-  if (req.query.gcf) {
-    let bigslice_gcf_id = parseInt(req.query.gcf, 10);
-    if (isNaN(bigslice_gcf_id)) {
-      // Handle the error: the gcf query parameter is not a valid integer
-      res.status(400).json({ error: 'Invalid gcf parameter' });
-      return;
-    }
+  // Log the query to debug if needed
+  console.log(sql);
 
-    sql = `
-    SELECT
-        sample,
-        MAX(CASE WHEN meta_key = 'geographic location (longitude)' THEN meta_value END) AS longitude,
-        MAX(CASE WHEN meta_key = 'geographic location (latitude)' THEN meta_value END) AS latitude
-    FROM
-        sample_metadata
-    WHERE
-        meta_key IN ('geographic location (longitude)', 'geographic location (latitude)')
-        AND meta_value IS NOT NULL
-        AND sample IN (
-            SELECT
-                sampleacc
-            FROM
-                mgnify_asms
-            WHERE
-                assembly IN (
-                  SELECT
-                    assembly
-                  FROM
-                    regions
-                  WHERE
-                    regions.bigslice_gcf_id = $1
-                )
-        )
-    GROUP BY
-        sample
-    ORDER BY
-        latitude
-    `;
-    params = [bigslice_gcf_id];
-  }
-
-  client.query(sql, params, (err, result) => {
+  // Execute the query
+  client.query(sql, (err, result) => {
     if (err) {
       console.log(sql);
       console.log(err);
+      res.status(500).json({ error: 'Database query error' });
     } else {
-      const catInfo = JSON.parse(JSON.stringify(result.rows));
-      res.json(catInfo);
+      res.json(result.rows);
     }
   });
 });
 
+router.get('/getBgcId', (req, res) => {
+  console.log("getBgcId " + req.query.dataset + " " + req.query.anchor);
+
+  const { dataset, anchor } = req.query;
+
+  // Correct query for PostgreSQL using $1, $2 placeholders
+  const query = 'SELECT region_id FROM regions WHERE assembly = $1 AND anchor = $2';
+
+  // Use the correct client.query syntax for PostgreSQL
+  client.query(query, [dataset, anchor], (err, result) => {
+    if (err) {
+      console.log("error:" + err);
+      res.status(500).json({ error: "Database query failed" });
+      return;
+    }
+
+    // Assuming the result.rows is an array with objects that contain the BGC ID
+    console.log("result: " + JSON.stringify(result.rows));
+
+    if (result.rows.length > 0) {
+      res.json({ bgcId: result.rows[0].region_id });
+    } else {
+      res.json({ bgcId: 'Not Found' });
+    }
+  });
+});
 
 router.get('/map-data', (req, res) => {
   client.query('WITH geo_data AS (\n' +
@@ -334,7 +357,7 @@ router.get('/map-data', (req, res) => {
       'ORDER BY\n' +
       '    gd.latitude;', (err, result) => {
 
-    const rows = JSON.parse(JSON.stringify(result.rows));
+    var rows = JSON.parse(JSON.stringify(result.rows));
     console.log("rows length: " + rows.length);
     res.json(rows);
   });
@@ -347,7 +370,7 @@ router.get('/body-map-data', (req, res) => {
       'WHERE meta_key = \'body site\'\n' +
       'GROUP BY sample, meta_value;', (err, result) => {
 
-    const rows = JSON.parse(JSON.stringify(result.rows));
+    var rows = JSON.parse(JSON.stringify(result.rows));
     res.json(rows);
   });
 });
@@ -367,7 +390,7 @@ router.get('/filter/:column', (req, res) => {
       '    AND sm2.meta_key = \'geographic location (latitude)\' AND sm2.meta_value IS NOT NULL\n' +
       '    AND sm3.meta_key = \'' + req.params.column +'\' AND sm3.meta_value IS NOT NULL;\n', (err, result) => {
 
-    const rows = JSON.parse(JSON.stringify(result.rows));
+    var rows = JSON.parse(JSON.stringify(result.rows));
     res.json(rows);
   })
 });
@@ -382,7 +405,7 @@ router.get('/column-values/:column', (req, res) => {
     if(err) {
       console.log(err);
     }
-    const possibleValues = JSON.parse(JSON.stringify(result.rows));
+    var possibleValues = JSON.parse(JSON.stringify(result.rows));
     res.json(possibleValues);
   });
 });
@@ -397,7 +420,7 @@ router.get('/sample-info', (req, res) => {
     if(err){
       console.log(err);
     }
-    const sampleInfo = JSON.parse(JSON.stringify(result.rows));
+    var sampleInfo = JSON.parse(JSON.stringify(result.rows));
     res.json(sampleInfo);
   });
 });
@@ -449,42 +472,55 @@ router.get('/sample-data-2', async (req, res) => {
   }
 });
 
-
-
 router.get('/bgc-info', (req, res) => {
   let sql = `
     SELECT
-      (SELECT COUNT(*) FROM regions) AS bgc_count,
-      (SELECT COUNT(*) FROM antismash_runs WHERE status = 'success') AS success_count,
-      (SELECT COUNT(DISTINCT gcf_id) FROM bigslice_gcf_membership) AS gcf_count,
-      ROUND(
-        CAST((SELECT COUNT(*) FROM regions) AS NUMERIC) /
-        (SELECT COUNT(*) FROM antismash_runs WHERE status = 'success'),
-        2
-      ) AS meanbgcsamples,
-      ROUND(
-        (SELECT COUNT(*) FROM bigslice_gcf_membership) /
-        CAST((SELECT COUNT(DISTINCT gcf_id) FROM bigslice_gcf_membership) AS NUMERIC),
-        2
-      ) AS meanbgc;
-    `;
+        (SELECT COUNT(*) FROM regions) AS bgc_count,
+        (SELECT COUNT(*) FROM antismash_runs WHERE status = 'success') AS success_count,
+        (SELECT COUNT(DISTINCT gcf_id) FROM bigslice_gcf_membership) AS gcf_count,
+        ROUND(
+            CAST((SELECT COUNT(*) FROM regions) AS NUMERIC) /
+            (SELECT COUNT(*) FROM antismash_runs WHERE status = 'success'),
+            2
+        ) AS meanbgcsamples,
+        ROUND(
+            (SELECT COUNT(*) FROM bigslice_gcf_membership) /
+            CAST((SELECT COUNT(DISTINCT gcf_id) FROM bigslice_gcf_membership) AS NUMERIC),
+            2
+        ) AS meanbgc,
+        (SELECT COUNT(*) FROM regions WHERE gcf_from_search = false) AS core_count,
+        (SELECT COUNT(*) FROM regions WHERE membership_value < 0.405) AS non_putative_count
+  `;
 
   let params = [];
-  // If the gcf query parameter is provided, modify the SQL query
+  let whereClause = [];
+
+  // Handle the gcf query parameter
   if (req.query.gcf) {
     let bigslice_gcf_id = parseInt(req.query.gcf, 10);
     if (isNaN(bigslice_gcf_id)) {
-      // Handle the error: the gcf query parameter is not a valid integer
-      res.status(400).json({ error: 'Invalid gcf parameter' });
-      return;
+      return res.status(400).json({ error: 'Invalid gcf parameter' });
     }
 
+    whereClause.push(`bigslice_gcf_id = $1`);
+    params.push(bigslice_gcf_id);
+  }
+
+  // Handle the samples query parameter
+  if (req.query.samples) {
+    let samples = req.query.samples.split(',').map(sample => sample.trim());
+    whereClause.push(`assembly IN (${samples.map((_, idx) => `$${params.length + idx + 1}`).join(', ')})`);
+    params.push(...samples);
+  }
+
+  // Adjust the SQL query if filters are applied
+  if (whereClause.length > 0) {
     sql = `
       WITH
         bgc AS (
           SELECT COUNT(*) AS count
           FROM regions
-          WHERE bigslice_gcf_id = $1
+          WHERE ${whereClause.join(' AND ')}
         ),
         success AS (
           SELECT COUNT(*) AS count
@@ -493,29 +529,48 @@ router.get('/bgc-info', (req, res) => {
           AND assembly IN (
             SELECT assembly
             FROM regions
-            WHERE bigslice_gcf_id = $1
+            WHERE ${whereClause.join(' AND ')}
           )
         ),
         gcf AS (
           SELECT COUNT(DISTINCT gcf_id) AS count
           FROM bigslice_gcf_membership
-          WHERE gcf_id = $1
+          WHERE gcf_id IN (
+            SELECT bigslice_gcf_id
+            FROM regions
+            WHERE ${whereClause.join(' AND ')}
+          )
+        ),
+        core AS (
+          SELECT COUNT(*) AS count
+          FROM regions
+          WHERE gcf_from_search = false
+          AND ${whereClause.join(' AND ')}
+        ),
+        non_putative AS (
+          SELECT COUNT(*) AS count
+          FROM regions
+          WHERE membership_value < 0.405
+          AND ${whereClause.join(' AND ')}
         )
       SELECT
         bgc.count AS bgc_count,
         success.count AS success_count,
         gcf.count AS gcf_count,
         ROUND(bgc.count::NUMERIC / NULLIF(success.count, 0), 2) AS meanbgcsamples,
-        ROUND(bgc.count / NULLIF(gcf.count::NUMERIC, 0), 2) AS meanbgc
-      FROM bgc, success, gcf;
+        ROUND(bgc.count / NULLIF(gcf.count::NUMERIC, 0), 2) AS meanbgc,
+        core.count AS core_count,
+        non_putative.count AS non_putative_count
+      FROM bgc, success, gcf, core, non_putative;
     `;
-    params = [bigslice_gcf_id];
   }
 
+  // Execute the query
   client.query(sql, params, (err, result) => {
     if (err) {
       console.log(sql);
       console.log(err);
+      res.status(500).json({ error: 'Database query error' });
     } else {
       const catInfo = JSON.parse(JSON.stringify(result.rows));
       res.json(catInfo);
@@ -532,36 +587,46 @@ router.get('/pc-category-count', (req, res) => {
   `;
 
   let params = [];
+  let filters = [];
+
   // If the gcf query parameter is provided, modify the SQL query
   if (req.query.gcf) {
     let bigslice_gcf_id = parseInt(req.query.gcf, 10);
     if (isNaN(bigslice_gcf_id)) {
-      // Handle the error: the gcf query parameter is not a valid integer
-      res.status(400).json({ error: 'Invalid gcf parameter' });
-      return;
+      return res.status(400).json({ error: 'Invalid gcf parameter' });
     }
+    filters.push(`bigslice_gcf_id = $${params.length + 1}`);
+    params.push(bigslice_gcf_id);
+  }
 
+  // Handle the samples query parameter
+  if (req.query.samples) {
+    let samples = req.query.samples.split(',').map(sample => sample.trim());
+    filters.push(`assembly IN (${samples.map((_, idx) => `$${params.length + idx + 1}`).join(', ')})`);
+    params.push(...samples);
+  }
+
+  // If there are any filters, apply them to the SQL query
+  if (filters.length > 0) {
     sql = `
       SELECT ARRAY_TO_STRING(product_categories, '|') AS categories, COUNT(*) AS count
       FROM regions
-      WHERE bigslice_gcf_id = $1
+      WHERE ${filters.join(' AND ')}
       GROUP BY categories
       ORDER BY count DESC
     `;
-    params = [bigslice_gcf_id];
   }
 
   client.query(sql, params, (err, result) => {
     if (err) {
       console.log(sql);
       console.log(err);
+      res.status(500).json({ error: 'Database query error' });
     } else {
-      const catInfo = JSON.parse(JSON.stringify(result.rows));
-      res.json(catInfo);
+      res.json(result.rows);
     }
   });
 });
-
 router.get('/gcf-category-count', (req, res) => {
   client.query('SELECT bgc_type, COUNT(DISTINCT family_number) as unique_families\n' +
       'FROM atlas.public.bigscape_clustering\n' +
@@ -571,7 +636,7 @@ router.get('/gcf-category-count', (req, res) => {
     if(err){
       console.log(err);
     }
-    const catInfo = JSON.parse(JSON.stringify(result.rows));
+    var catInfo = JSON.parse(JSON.stringify(result.rows));
     res.json(catInfo);
   });
 });
@@ -580,10 +645,10 @@ router.get('/pc-product-count', (req, res) => {
   let sql = `
     SELECT prod, count
     FROM (
-      SELECT type AS prod, COUNT(*) AS count, ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) AS row_num
-      FROM regions
-      GROUP BY type
-    ) top_rows
+           SELECT type AS prod, COUNT(*) AS count, ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) AS row_num
+           FROM regions
+           GROUP BY type
+         ) top_rows
     WHERE row_num <= 15
     UNION ALL
     SELECT 'Others', SUM(count) AS count
@@ -593,25 +658,37 @@ router.get('/pc-product-count', (req, res) => {
       GROUP BY type
       ORDER BY count DESC
       OFFSET 15 -- Exclude the top 15 rows
-    ) other_rows;
+      ) other_rows;
   `;
 
   let params = [];
-  // If the gcf query parameter is provided, modify the SQL query
+  let filters = [];
+
+  // Handle the gcf query parameter
   if (req.query.gcf) {
     let bigslice_gcf_id = parseInt(req.query.gcf, 10);
     if (isNaN(bigslice_gcf_id)) {
-      // Handle the error: the gcf query parameter is not a valid integer
-      res.status(400).json({ error: 'Invalid gcf parameter' });
-      return;
+      return res.status(400).json({ error: 'Invalid gcf parameter' });
     }
+    filters.push(`bigslice_gcf_id = $${params.length + 1}`);
+    params.push(bigslice_gcf_id);
+  }
 
+  // Handle the samples query parameter
+  if (req.query.samples) {
+    let samples = req.query.samples.split(',').map(sample => sample.trim());
+    filters.push(`assembly IN (${samples.map((_, idx) => `$${params.length + idx + 1}`).join(', ')})`);
+    params.push(...samples);
+  }
+
+  // If filters are applied, adjust the SQL query
+  if (filters.length > 0) {
     sql = `
     SELECT prod, count
     FROM (
       SELECT type AS prod, COUNT(*) AS count, ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) AS row_num
       FROM regions
-      WHERE bigslice_gcf_id = $1
+      WHERE ${filters.join(' AND ')}
       GROUP BY type
     ) top_rows
     WHERE row_num <= 15
@@ -620,23 +697,22 @@ router.get('/pc-product-count', (req, res) => {
     FROM (
       SELECT COUNT(*) AS count
       FROM regions
-      WHERE bigslice_gcf_id = $1
+      WHERE ${filters.join(' AND ')}
       GROUP BY type
       ORDER BY count DESC
       OFFSET 15 -- Exclude the top 15 rows
     ) other_rows;
     `;
-
-    params = [bigslice_gcf_id];
   }
 
+  // Execute the query
   client.query(sql, params, (err, result) => {
     if (err) {
       console.log(sql);
       console.log(err);
+      res.status(500).json({ error: 'Database query error' });
     } else {
-      const catInfo = JSON.parse(JSON.stringify(result.rows));
-      res.json(catInfo);
+      res.json(result.rows);
     }
   });
 });
@@ -674,7 +750,7 @@ router.get('/gcf-count-hist', (req, res) => {
       console.log(sql);
       console.log(err);
     }
-    const bgcInfo = JSON.parse(JSON.stringify(result.rows));
+    var bgcInfo = JSON.parse(JSON.stringify(result.rows));
     res.json(bgcInfo);
   });
 });
@@ -684,36 +760,44 @@ router.get('/gcf-table-sunburst', (req, res) => {
     SELECT longest_biome, COUNT(longest_biome)
     FROM regions
     WHERE longest_biome IS NOT NULL
-    GROUP BY longest_biome
   `;
 
   let params = [];
-  // If the gcf query parameter is provided, modify the SQL query
+  let filters = [];
+
+  // Handle the gcf query parameter
   if (req.query.gcf) {
     let bigslice_gcf_id = parseInt(req.query.gcf, 10);
     if (isNaN(bigslice_gcf_id)) {
-      // Handle the error: the gcf query parameter is not a valid integer
-      res.status(400).json({ error: 'Invalid gcf parameter' });
-      return;
+      return res.status(400).json({ error: 'Invalid gcf parameter' });
     }
-
-    sql = `
-    SELECT longest_biome, COUNT(longest_biome)
-    FROM regions
-    WHERE longest_biome IS NOT NULL AND bigslice_gcf_id = $1
-    GROUP BY longest_biome
-    `;
-
-    params = [bigslice_gcf_id];
+    filters.push(`bigslice_gcf_id = $${params.length + 1}`);
+    params.push(bigslice_gcf_id);
   }
+
+  // Handle the samples query parameter
+  if (req.query.samples) {
+    let samples = req.query.samples.split(',').map(sample => `'${sample.trim()}'`).join(', ');
+    filters.push(`assembly IN (${samples})`);
+  }
+
+  // If there are filters, append them to the SQL query
+  if (filters.length > 0) {
+    sql += ` AND ${filters.join(' AND ')}`;
+  }
+
+  sql += ` GROUP BY longest_biome`;
+
+  // Log the query for debugging
+  console.log(sql);
 
   client.query(sql, params, (err, result) => {
     if (err) {
       console.log(sql);
       console.log(err);
+      res.status(500).json({ error: 'Database query error' });
     } else {
-      const catInfo = JSON.parse(JSON.stringify(result.rows));
-      res.json(catInfo);
+      res.json(result.rows);
     }
   });
 });
@@ -733,6 +817,9 @@ router.get('/gcf-table', async (req, res) => {
 
 router.get('/bgc-table', async (req, res) => {
   const gcf = req.query.gcf;
+  const samples = req.query.samples;
+  const showCoreMembers = req.query.showCoreMembers === 'true'; // Check if "showCoreMembers" is true
+  const showNonPutativeMembers = req.query.showNonPutativeMembers === 'true';
   const draw = req.query.draw;
   const start = parseInt(req.query.start);
   const length = parseInt(req.query.length);
@@ -767,37 +854,37 @@ router.get('/bgc-table', async (req, res) => {
       let value = criteria.value;
       let value1 = criteria.value1;
 
-      if(condition === '=') {
+      if(condition == '=') {
         whereClauses.push(data + ' = \'' + value + '\'');
-      } else if (condition === '!=') {
+      } else if (condition == '!=') {
         whereClauses.push(data + ' != \'' + value + '\'');
-      } else if (condition === '<') {
+      } else if (condition == '<') {
         whereClauses.push(data + ' < \'' + value + '\'');
-      } else if (condition === '>') {
+      } else if (condition == '>') {
         whereClauses.push(data + ' > \'' + value + '\'');
-      } else if (condition === '<=') {
+      } else if (condition == '<=') {
         whereClauses.push(data + ' <= \'' + value + '\'');
-      } else if (condition === '>=') {
+      } else if (condition == '>=') {
         whereClauses.push(data + ' >= \'' + value + '\'');
-      } else if (condition === 'between') {
+      } else if (condition == 'between') {
         whereClauses.push(data + ' BETWEEN \'' + value + '\' AND \'' + value1 + '\'');
-      } else if (condition === 'not between') {
+      } else if (condition == 'not between') {
         whereClauses.push(data + ' NOT BETWEEN \'' + value + '\' AND \'' + value1 + '\'');
-      } else if (condition === 'contains') {
+      } else if (condition == 'contains') {
         whereClauses.push(data + ' LIKE \'%' + value + '%\'');
-      } else if (condition === '!contains') {
+      } else if (condition == '!contains') {
         whereClauses.push(data + ' NOT LIKE \'%' + value + '%\'');
-      } else if (condition === 'starts') {
+      } else if (condition == 'starts') {
         whereClauses.push(data + ' LIKE \'' + value + '%\'');
-      } else if (condition === '!starts') {
+      } else if (condition == '!starts') {
         whereClauses.push(data + ' NOT LIKE \'' + value + '%\'');
-      } else if (condition === 'ends') {
+      } else if (condition == 'ends') {
         whereClauses.push(data + ' LIKE \'%' + value + '\'');
-      } else if (condition === '!ends') {
+      } else if (condition == '!ends') {
         whereClauses.push(data + ' NOT LIKE \'%' + value + '\'');
-      } else if (condition === 'null') {
+      } else if (condition == 'null') {
         whereClauses.push(data + ' IS NULL');
-      } else if (condition === '!null') {
+      } else if (condition == '!null') {
         whereClauses.push(data + ' IS NOT NULL');
       }
     });
@@ -807,12 +894,25 @@ router.get('/bgc-table', async (req, res) => {
   if(gcf) {
     whereClauses.push('bigslice_gcf_id = ' + gcf);
   }
+  if (samples) {
+    // Split the samples string into an array, and wrap each sample in single quotes
+    let sampleList = samples.split(',').map(sample => `'${sample.trim()}'`).join(', ');
 
+    // Add the clause with the correctly formatted sample list
+    whereClauses.push(`assembly IN (${sampleList})`);
+  }
+
+  if(showCoreMembers) {
+    whereClauses.push('gcf_from_search = false');
+  }
+
+  if(showNonPutativeMembers) {
+    whereClauses.push('membership_value < 0.405');
+  }
+
+  console.log("where clauses: " + whereClauses);
 
   let whereClause = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
-
-
-  console.log("where clause: " + whereClause);
 
   let totalCountQuery = 'SELECT COUNT(*) FROM regions ' + whereClause;
   let filterCountQuery = 'SELECT COUNT(*) FROM regions ' + whereClause;
@@ -824,8 +924,11 @@ router.get('/bgc-table', async (req, res) => {
     const totalCountResult = await pool.query(totalCountQuery);
     const filterCountResult = await pool.query(filterCountQuery);
 
+    console.log("total count: " + totalCountResult.rows[0].count);
+    console.log("filter count: " + filterCountResult.rows[0].count);
+
     const sql = 'SELECT * FROM regions ' + whereClause + ' ' + orderByClause + ' LIMIT ' + length + ' OFFSET ' + start + ';';
-    console.log(sql);
+    console.log("query: " + sql);
     const { rows } = await pool.query(sql);
 
     res.json({

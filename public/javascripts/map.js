@@ -1,5 +1,5 @@
 function createMap() {
-    const map = L.map('map').setView({lon: 0, lat: 0}, 2.5);
+    var map = L.map('map').setView({lon: 0, lat: 0}, 2.5);
 
     const southWest = L.latLng(-90, -180);
     const northEast = L.latLng(90, 180);
@@ -16,6 +16,7 @@ function createMap() {
         maxZoom: 9,
         attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap contributors</a>',
     }).addTo(map);
+
     // show the scale bar on the lower left corner
     L.control.scale({imperial: true, metric: true}).addTo(map);
 
@@ -24,18 +25,24 @@ function createMap() {
     xhr.responseType = 'json';
 
     const markers = L.markerClusterGroup();
+    const markerList = [];
 
     xhr.onload = function () {
         if (xhr.status === 200) {
             const results = xhr.response;
-            console.log(results.length);
-            for (let i = 0; i < results.length; i++) {
+            for (var i = 0; i < results.length; i++) {
                 if (typeof results[i].longitude === 'number' && typeof results[i].latitude === 'number') {
                     const marker = L.marker({
                         lon: parseFloat(results[i].longitude),
                         lat: parseFloat(results[i].latitude)
-                    // }).bindPopup("<a href=\"/datasets/" + results[i].assembly + "/antismash/index.html \" target='_blank'> " + results[i].assembly + "</a>");
                     }).bindPopup("<a href=\"/antismash?dataset=" + results[i].assembly + " \" target='_blank'> " + results[i].assembly + "</a>");
+
+                    // Store marker and its associated data
+                    markerList.push({
+                        marker: marker,
+                        id: results[i].assembly
+                    });
+
                     markers.addLayer(marker);
                 }
             }
@@ -43,9 +50,92 @@ function createMap() {
     };
 
     map.addLayer(markers);
-
     xhr.send();
+
+    // Add drawing controls
+    var drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    var drawControl = new L.Control.Draw({
+        draw: {
+            polyline: false,
+            polygon: false,
+            circle: false,
+            marker: false,
+            circlemarker: false,
+            rectangle: true // Enable rectangle drawing
+        },
+        edit: {
+            featureGroup: drawnItems
+        }
+    });
+    map.addControl(drawControl);
+
+    let containedIDs = [];
+
+    // Handle the rectangle draw event
+    map.on('draw:created', function (e) {
+        var type = e.layerType,
+            layer = e.layer;
+
+        if (type === 'rectangle') {
+            var bounds = layer.getBounds(); // Get the bounds of the drawn rectangle
+
+            var containedMarkers = markerList.filter(function(item) {
+                return bounds.contains(item.marker.getLatLng()); // Check if marker is within the bounds
+            });
+
+            containedIDs = containedMarkers.map(function(item) {
+                return item.id; // Get the IDs of the contained markers
+            });
+
+            console.log('Markers within the rectangle:', containedIDs);
+        }
+
+        drawnItems.addLayer(layer);
+    });
+
+    // Add an "Analyze" button to the map
+    L.Control.AnalyzeButton = L.Control.extend({
+        onAdd: function(map) {
+            var btn = L.DomUtil.create('button', 'leaflet-bar leaflet-control leaflet-control-custom');
+            btn.innerHTML = 'Inspect';
+            btn.style.backgroundColor = '#fff';
+            btn.style.padding = '5px';
+            btn.style.cursor = 'pointer';
+
+            // Handle button click event
+            L.DomEvent.on(btn, 'click', function() {
+                if (containedIDs.length > 0) {
+                    // Construct the URL with the sample IDs
+                    var baseUrl = 'https://bgc-atlas.cs.uni-tuebingen.de/bgcs?samples=';
+                    var sampleIdsParam = containedIDs.join(','); // Join the IDs with commas
+                    var fullUrl = baseUrl + encodeURIComponent(sampleIdsParam);
+
+                    // Open the URL in a new tab or redirect
+                    window.open(fullUrl, '_blank'); // Opens in a new tab
+                    // Alternatively, you can use window.location.href = fullUrl; to redirect in the same tab
+                } else {
+                    alert("Please use the rectangle tool on the left-side to select a region for inspection.");
+                }
+            });
+
+            return btn;
+        },
+
+        onRemove: function(map) {
+            // Nothing to clean up here
+        }
+    });
+
+    // Add the "Analyze" button to the top-left corner of the map
+    L.control.analyzeButton = function(opts) {
+        return new L.Control.AnalyzeButton(opts);
+    }
+    L.control.analyzeButton({ position: 'topright' }).addTo(map);
 }
+
+
 
 function getSampleInfo() {
     const xhr = new XMLHttpRequest();

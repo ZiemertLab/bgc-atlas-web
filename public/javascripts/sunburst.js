@@ -68,11 +68,50 @@ function render(data, targetElement) {
     // Create a new Vega view
     const spec = {
         "$schema": "https://vega.github.io/schema/vega/v5.json",
-        "description": "A hierarchical view of biome tree distribution.",
+        "description": "A hierarchical view of biome tree distribution with zoom functionality and tooltip on click.",
         "width": 300,
         "height": 300,
         "padding": 5,
         "autosize": "pad",
+
+        // Define a signal to handle the current zoom level and tooltip interaction
+        "signals": [
+            {
+                "name": "current",  // Signal to track the current focused/zoomed node
+                "value": null,
+                "on": [
+                    {"events": "arc:click", "update": "datum"}  // Track the clicked node
+                ]
+            },
+            {
+                "name": "tooltipNode",  // Signal to handle the clicked node for tooltip
+                "value": null,
+                "on": [
+                    {"events": "arc:click", "update": "datum"}  // Set tooltip node on arc click
+                ]
+            },
+            {
+                "name": "tooltipX",  // X position of the tooltip
+                "value": 0,
+                "on": [
+                    {"events": "arc:click", "update": "x()"}  // Position the tooltip based on click
+                ]
+            },
+            {
+                "name": "tooltipY",  // Y position of the tooltip
+                "value": 0,
+                "on": [
+                    {"events": "arc:click", "update": "y()"}  // Position the tooltip based on click
+                ]
+            },
+            {
+                "name": "tooltipVisible",  // Control the visibility of the tooltip
+                "value": false,
+                "on": [
+                    {"events": "arc:click", "update": "true"}  // Make tooltip visible on click
+                ]
+            }
+        ],
 
         "data": [
             {
@@ -99,18 +138,19 @@ function render(data, targetElement) {
             {
                 "name": "color",
                 "type": "ordinal",
-                "domain": {"data": "tree", "field": "levelId"}, // Use the first-level ID for coloring
+                "domain": {"data": "tree", "field": "levelId"},
                 "range": {"scheme": "spectral"}
             }
         ],
 
-        "legends" : [
+        // Include the legend here
+        "legends": [
             {
                 "fill": "color",
                 "title": "Biomes",
                 "orient": "right",
-                "columns": columns,
-                "labelLimit": 0,
+                "columns": 2,  // You can adjust the number of columns to fit your design
+                "labelLimit": 0
             }
         ],
 
@@ -123,13 +163,12 @@ function render(data, targetElement) {
                         "x": {"signal": "width / 2"},
                         "y": {"signal": "height / 2"},
                         "fill": {
-                            "condition":{
+                            "condition": {
                                 "test": "datum.depth == 0",
                                 "value": "white"
                             },
                             "scale": "color", "field": "levelId"
-                        },
-                        "tooltip": {"signal": "datum.name + (datum.count ? ', ' + datum.count + ' count' : '')"}
+                        }
                     },
                     "update": {
                         "startAngle": {"field": "a0"},
@@ -146,10 +185,29 @@ function render(data, targetElement) {
                         "zindex": {"value": 1}
                     }
                 }
+            },
+            // Tooltip mark: this will appear on click
+            {
+                "type": "text",
+                "encode": {
+                    "enter": {
+                        "align": {"value": "center"},
+                        "baseline": {"value": "middle"},
+                        "fontSize": {"value": 12},
+                        "fill": {"value": "black"}
+                    },
+                    "update": {
+                        "x": {"signal": "tooltipX"},
+                        "y": {"signal": "tooltipY"},
+                        "text": {"signal": "tooltipNode ? tooltipNode.name + (tooltipNode.value ? ', ' + tooltipNode.value + ' count' : '') : ''"},
+                        "opacity": {"signal": "tooltipVisible ? 1 : 0"}
+                    }
+                }
             }
         ]
     };
 
+// Create a new Vega view
     const view = new vega.View(vega.parse(spec), {
         renderer: 'canvas',
         container: targetElement,
@@ -160,10 +218,27 @@ function render(data, targetElement) {
 }
 
 function createSunburstView(targetElement) {
-    // Get the gcf query parameter from the URL
-    const gcf = window.location.search.split('=')[1];
-    // Include the gcf query parameter in the request URL
-    const url = gcf ? `/gcf-table-sunburst?gcf=${gcf}` : '/gcf-table-sunburst';
+    // Parse the URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+
+    // Get the gcf and samples query parameters
+    const gcf = urlParams.get('gcf');
+    const samples = urlParams.get('samples');
+
+    // Construct the base URL
+    let url = '/gcf-table-sunburst';
+
+    // Append query parameters if they exist
+    if (gcf || samples) {
+        url += '?';
+        if (gcf) {
+            url += `gcf=${gcf}`;
+        }
+        if (samples) {
+            // Append '&' if gcf already exists
+            url += gcf ? `&samples=${samples}` : `samples=${samples}`;
+        }
+    }
 
     fetch(url)
         .then(response => {
