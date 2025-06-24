@@ -45,12 +45,19 @@ function createTimestampedDirectory(basePath) {
  */
 async function validateUploadedFiles(files) {
   for (const file of files) {
-    const fd = await fs.promises.open(file.path, 'r');
-    const buffer = Buffer.alloc(64);
-    const { bytesRead } = await fd.read(buffer, 0, 64, 0);
-    await fd.close();
+    const slice = await new Promise((resolve, reject) => {
+      const chunks = [];
+      const stream = fs.createReadStream(file.path, { start: 0, end: 63 });
 
-    const slice = buffer.subarray(0, bytesRead);
+      stream.on('data', chunk => {
+        chunks.push(chunk);
+      });
+
+      stream.on('error', err => reject(err));
+      stream.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+    });
 
     // reject if any null bytes are found (simple binary detection)
     if (slice.includes(0)) {
@@ -141,7 +148,7 @@ async function processUploadedFiles(req, sendEvent) {
  */
 function getMembership(reportId) {
   return new Promise((resolve, reject) => {
-    const { spawn } = require('child_process');
+    const sqlite3 = require('sqlite3').verbose();
 
     let sanitizedId;
     try {
@@ -150,34 +157,22 @@ function getMembership(reportId) {
       return reject(err);
     }
 
-    const query = `SELECT * FROM gcf_membership;`;
-
     const dbPath = path.join(process.env.REPORTS_DIR, sanitizedId, 'data.db');
-    const getReportIdProc = spawn('sqlite3', [
-      dbPath,
-      query
-    ]);
-
-    let membershipString = '';
-
-    getReportIdProc.stderr.on('data', function(data) {
-      debug(data.toString());
-    });
-
-    getReportIdProc.stdout.on('data', function(data) {
-      debug('membership string: ' + data.toString());
-      membershipString = data.toString();
-    });
-
-    getReportIdProc.on('close', function(code) {
-      if (code === 0) {
-        debug('SQLite process exited successfully.');
-        debug('membership: ' + membershipString);
-        resolve(membershipString);
-      } else {
-        logger.error(`SQLite process exited with code ${code}.`);
-        reject(`SQLite process exited with code ${code}`);
+    const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY, (err) => {
+      if (err) {
+        logger.error(`Error opening database: ${err.message}`);
+        return reject(err);
       }
+    });
+
+    const query = 'SELECT * FROM gcf_membership;';
+    db.all(query, (err, rows) => {
+      db.close();
+      if (err) {
+        logger.error(`Error executing query: ${err.message}`);
+        return reject(err);
+      }
+      resolve(rows);
     });
   });
 }

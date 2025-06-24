@@ -2,6 +2,7 @@ const EventEmitter = require('events');
 const fs = require('fs-extra');
 const path = require('path');
 const { spawn } = require('child_process');
+jest.mock('../config/database', () => ({ pool: { query: jest.fn() } }));
 const jobService = require('../services/jobService');
 
 jest.mock('fs-extra', () => {
@@ -44,7 +45,7 @@ describe('validateUploadedFiles', () => {
     const tmpDir = fs.mkdtempSync('/tmp/gbk-');
     const filePath = path.join(tmpDir, 'test.gbk');
     fs.writeFileSync(filePath, 'LOCUS       TEST');
-    await expect(validateUploadedFiles([{ path: filePath }])).resolves.not.toThrow();
+    await expect(validateUploadedFiles([{ path: filePath }])).resolves.toBeUndefined();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 

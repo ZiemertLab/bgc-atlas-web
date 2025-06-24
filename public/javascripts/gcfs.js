@@ -4,8 +4,8 @@ function getInfo() {
         type: 'GET',
         dataType: 'json',
         success: function(results) {
-            $("#gcf-count").html("Total GCFs: " + results[0].gcf_count);
-            $("#mean-gcf").html("Mean #BGC per GCF: " + results[0].meanbgc);
+            $("#gcf-count").html(results[0].gcf_count);
+            $("#mean-gcf").html(results[0].meanbgc);
         }
     });
 }
@@ -343,13 +343,19 @@ function handleLazyLoad() {
     const gcfCategoryChart = document.getElementById('gcf-category-chart');
     const gcfCountHistChart = document.getElementById('gcf-count-hist-chart');
 
-    // Load charts if they're in viewport and not already loaded
-    if (gcfCategoryChart && !gcfCategoryChart.classList.contains('chart-loaded') && isElementInViewport(gcfCategoryChart)) {
+    // Check if the cards containing the charts are expanded
+    const isCategoryCardExpanded = $('#gcfCategoryCollapse').hasClass('show');
+    const isCountHistCardExpanded = $('#gcfCountHistCollapse').hasClass('show');
+
+    // Load charts if they're in viewport, their card is expanded, and they're not already loaded
+    if (gcfCategoryChart && !gcfCategoryChart.classList.contains('chart-loaded') && 
+        isCategoryCardExpanded && isElementInViewport(gcfCategoryChart)) {
         plotGCFChart();
         gcfCategoryChart.classList.add('chart-loaded');
     }
 
-    if (gcfCountHistChart && !gcfCountHistChart.classList.contains('chart-loaded') && isElementInViewport(gcfCountHistChart)) {
+    if (gcfCountHistChart && !gcfCountHistChart.classList.contains('chart-loaded') && 
+        isCountHistCardExpanded && isElementInViewport(gcfCountHistChart)) {
         plotGCFCountHist();
         gcfCountHistChart.classList.add('chart-loaded');
     }
@@ -363,7 +369,47 @@ $(document).ready(function () {
     handleLazyLoad(); // Check on initial load
 
     // Add event listeners for scroll and resize to trigger lazy loading
-    $(window).on('scroll resize', handleLazyLoad);
+    // Use a debounce variable to prevent multiple calls in quick succession
+    let resizeTimeout;
+    $(window).on('scroll resize', function() {
+        handleLazyLoad();
+
+        // Debounce the resize event to prevent multiple calls to columns.adjust()
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(function() {
+            // Adjust DataTable columns on window resize to fix header alignment
+            if ($.fn.dataTable.isDataTable('#gcfTable')) {
+                $('#gcfTable').DataTable().columns.adjust();
+            }
+        }, 150); // Wait 150ms after resize ends before adjusting
+    });
+
+    // Adjust columns when card is expanded or collapsed
+    $('#gcfTableCollapse').on('shown.bs.collapse hidden.bs.collapse', function() {
+        if ($.fn.dataTable.isDataTable('#gcfTable')) {
+            // Use a longer timeout to ensure animation is complete
+            setTimeout(function() {
+                $('#gcfTable').DataTable().columns.adjust();
+            }, 150);
+        }
+    });
+
+    // Handle chart rendering when their cards are expanded
+    $('#gcfCountHistCollapse').on('shown.bs.collapse', function() {
+        const gcfCountHistChart = document.getElementById('gcf-count-hist-chart');
+        if (gcfCountHistChart && !gcfCountHistChart.classList.contains('chart-loaded')) {
+            plotGCFCountHist();
+            gcfCountHistChart.classList.add('chart-loaded');
+        }
+    });
+
+    $('#gcfCategoryCollapse').on('shown.bs.collapse', function() {
+        const gcfCategoryChart = document.getElementById('gcf-category-chart');
+        if (gcfCategoryChart && !gcfCategoryChart.classList.contains('chart-loaded')) {
+            plotGCFChart();
+            gcfCategoryChart.classList.add('chart-loaded');
+        }
+    });
 
     let isTextView = false; // Flag to toggle between text and chart view
 
@@ -382,13 +428,28 @@ $(document).ready(function () {
             "data": function(d) {
                 // Convert the order array to a string for transmission
                 d.order = JSON.stringify(d.order);
+
+                // Include searchBuilder data if available
+                if (d.searchBuilder) {
+                    d.searchBuilder = JSON.stringify(d.searchBuilder);
+                }
+
                 return d;
+            },
+            "dataSrc": function(json) {
+                // After data is loaded, adjust columns to ensure header alignment
+                // Use a longer timeout to ensure DOM is fully updated
+                setTimeout(function() {
+                    table.columns.adjust();
+                }, 150);
+                return json.data;
             }
         },
         "serverSide": true, // Enable server-side processing
         "processing": true, // Show processing indicator
         "pageLength": 10,
         "paging": true, // Ensure paging is explicitly enabled
+        "scrollX": true, // Enable horizontal scrolling
         "scrollCollapse": true,
         "autoWidth": false,
         "searchDelay": 500, // Delay search execution by 500ms after user stops typing
@@ -402,6 +463,11 @@ $(document).ready(function () {
         "buttons": [
             'searchBuilder'
         ],
+        // Remove drawCallback columns.adjust() to prevent potential infinite recursion
+        "drawCallback": function() {
+            // No need to adjust columns here as it might cause infinite recursion
+            // when combined with other event handlers
+        },
         "columns": [
             {data: 'gcf_id', name: 'GCF Family', title: 'GCF Family', type: 'int', width: '2.5%'},
             {data: 'num_core_regions', name: '# Core BGCs', title: '# Core BGCs', type: 'num', width: '2.5%'},
@@ -412,7 +478,80 @@ $(document).ready(function () {
                 type: 'string',
                 width: '15%',
                 render: function (data, type, row) {
-                    return type === 'display' ? data : data;
+                    if (type === 'display' && data) {
+                        // Parse the types and their counts
+                        const typeItems = data.split(',').map(item => {
+                            const [label, countStr] = item.trim().split(/\s*\(\s*|\s*\)\s*/);
+                            return {
+                                label: label,
+                                count: parseInt(countStr) || 0
+                            };
+                        });
+
+                        // Sort by count in descending order
+                        typeItems.sort((a, b) => b.count - a.count);
+
+                        // Calculate total count
+                        const totalCount = typeItems.reduce((sum, item) => sum + item.count, 0);
+
+                        // Calculate cumulative percentage and find cutoff for 90%
+                        let cumulativeCount = 0;
+                        let cutoffIndex = -1;
+
+                        for (let i = 0; i < typeItems.length; i++) {
+                            cumulativeCount += typeItems[i].count;
+                            const cumulativePercentage = (cumulativeCount / totalCount) * 100;
+
+                            if (cumulativePercentage >= 90) {
+                                cutoffIndex = i;
+                                break;
+                            }
+                        }
+
+                        // If we have more types than the cutoff, group the rest as "Other"
+                        if (cutoffIndex >= 0 && cutoffIndex < typeItems.length - 1) {
+                            // Get the top types (up to 90%)
+                            const topTypes = typeItems.slice(0, cutoffIndex + 1);
+
+                            // Calculate the count and percentage for "Other"
+                            const otherCount = totalCount - topTypes.reduce((sum, item) => sum + item.count, 0);
+                            const otherPercentage = Math.round((otherCount / totalCount) * 100);
+
+                            // Get the types that will be grouped as "Other"
+                            const otherTypes = typeItems.slice(cutoffIndex + 1);
+
+                            // If "Other" is just one kind of type, show it normally
+                            if (otherTypes.length === 1) {
+                                const singleType = otherTypes[0];
+                                // Format the top types
+                                const topTypesText = topTypes.map(item => 
+                                    `${item.label} (${item.count})`
+                                ).join(', ');
+
+                                // Add the single type normally
+                                return topTypesText + 
+                                       `, ${singleType.label} (${singleType.count})`;
+                            }
+
+                            const otherTypesText = otherTypes.map(item => 
+                                `${item.label} (${item.count})`
+                            ).join(', ');
+
+                            // Format the top types
+                            const topTypesText = topTypes.map(item => 
+                                `${item.label} (${item.count})`
+                            ).join(', ');
+
+                            // Return the formatted string with top types and "Other"
+                            return topTypesText + 
+                                   `, <span style="text-decoration: underline; font-style: italic" title="${otherTypesText}">` +
+                                   `Other (${otherCount})</span>`;
+                        } else {
+                            // If all types are within 90%, return the original data
+                            return data;
+                        }
+                    }
+                    return data;
                 }
             },
             {
@@ -465,7 +604,80 @@ $(document).ready(function () {
                 type: 'string',
                 width: '15%',
                 render: function (data, type, row) {
-                    return type === 'display' ? data : data;
+                    if (type === 'display' && data) {
+                        // Parse the types and their counts
+                        const typeItems = data.split(',').map(item => {
+                            const [label, countStr] = item.trim().split(/\s*\(\s*|\s*\)\s*/);
+                            return {
+                                label: label,
+                                count: parseInt(countStr) || 0
+                            };
+                        });
+
+                        // Sort by count in descending order
+                        typeItems.sort((a, b) => b.count - a.count);
+
+                        // Calculate total count
+                        const totalCount = typeItems.reduce((sum, item) => sum + item.count, 0);
+
+                        // Calculate cumulative percentage and find cutoff for 90%
+                        let cumulativeCount = 0;
+                        let cutoffIndex = -1;
+
+                        for (let i = 0; i < typeItems.length; i++) {
+                            cumulativeCount += typeItems[i].count;
+                            const cumulativePercentage = (cumulativeCount / totalCount) * 100;
+
+                            if (cumulativePercentage >= 90) {
+                                cutoffIndex = i;
+                                break;
+                            }
+                        }
+
+                        // If we have more types than the cutoff, group the rest as "Other"
+                        if (cutoffIndex >= 0 && cutoffIndex < typeItems.length - 1) {
+                            // Get the top types (up to 90%)
+                            const topTypes = typeItems.slice(0, cutoffIndex + 1);
+
+                            // Calculate the count and percentage for "Other"
+                            const otherCount = totalCount - topTypes.reduce((sum, item) => sum + item.count, 0);
+                            const otherPercentage = Math.round((otherCount / totalCount) * 100);
+
+                            // Get the types that will be grouped as "Other"
+                            const otherTypes = typeItems.slice(cutoffIndex + 1);
+
+                            // If "Other" is just one kind of type, show it normally
+                            if (otherTypes.length === 1) {
+                                const singleType = otherTypes[0];
+                                // Format the top types
+                                const topTypesText = topTypes.map(item => 
+                                    `${item.label} (${item.count})`
+                                ).join(', ');
+
+                                // Add the single type normally
+                                return topTypesText + 
+                                       `, ${singleType.label} (${singleType.count})`;
+                            }
+
+                            const otherTypesText = otherTypes.map(item => 
+                                `${item.label} (${item.count})`
+                            ).join(', ');
+
+                            // Format the top types
+                            const topTypesText = topTypes.map(item => 
+                                `${item.label} (${item.count})`
+                            ).join(', ');
+
+                            // Return the formatted string with top types and "Other"
+                            return topTypesText + 
+                                   `, <span style="text-decoration: underline; font-style: italic;" title="${otherTypesText}">` +
+                                   `Other (${otherCount})</span>`;
+                        } else {
+                            // If all types are within 90%, return the original data
+                            return data;
+                        }
+                    }
+                    return data;
                 }
             },
             {
@@ -570,10 +782,32 @@ $(document).ready(function () {
                 if (!rowData[dataField]) return;
 
                 // Parse the data
-                const itemData = rowData[dataField].split(',').map(item => {
+                const rawItemData = rowData[dataField].split(',').map(item => {
                     const [label, count] = item.trim().split(/\s*\(\s*|\s*\)\s*/);
                     return {label: label, count: parseInt(count) || 0};
                 });
+
+                // Combine duplicate taxon names for taxa-all charts
+                let itemData = rawItemData;
+                if (chartType === 'taxa-all') {
+                    // Create a map to combine items with the same label
+                    const labelMap = new Map();
+                    rawItemData.forEach(item => {
+                        if (labelMap.has(item.label)) {
+                            // If label exists, add to its count
+                            labelMap.set(item.label, labelMap.get(item.label) + item.count);
+                        } else {
+                            // If label doesn't exist, add it to the map
+                            labelMap.set(item.label, item.count);
+                        }
+                    });
+
+                    // Convert the map back to an array of objects
+                    itemData = Array.from(labelMap.entries()).map(([label, count]) => ({
+                        label: label,
+                        count: count
+                    }));
+                }
 
                 const totalCount = itemData.reduce((acc, curr) => acc + curr.count, 0);
                 if (totalCount === 0) return; // Skip if there's no data

@@ -32,8 +32,18 @@ const experimentalRouter = require('./routes/experimentalRouter');
 const ultraDeepSoilRouter = require('./routes/ultraDeepSoilRouter');
 const monthlySoilRouter = require('./routes/monthlySoilRouter');
 const jobRouter = require('./routes/jobRouter');
+const adminRouter = require('./routes/adminRouter');
 
 const app = express();
+// Ensure APP_URL has a protocol
+let appUrl = process.env.APP_URL || '';
+// If APP_URL is not empty and doesn't start with http:// or https://, add https://
+if (appUrl && !appUrl.match(/^https?:\/\//)) {
+  appUrl = 'https://' + appUrl;
+}
+app.locals.APP_URL = appUrl;
+app.locals.MAINTENANCE_MODE = process.env.MAINTENANCE_MODE === 'true' || false;
+app.set('trust proxy', 1); // Trust X-Forwarded-For header for rate limiting behind proxy
 app.use(compression()); // Add compression middleware for faster JSON responses
 app.use(etagMiddleware);
 app.use(cookieParser());
@@ -44,7 +54,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "code.jquery.com", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "cdn.datatables.net", "unpkg.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "code.jquery.com", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "cdn.datatables.net", "unpkg.com", "d3js.org"],
       styleSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "cdn.datatables.net", "stackpath.bootstrapcdn.com", "unpkg.com"],
       styleSrcElem: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "cdn.datatables.net", "stackpath.bootstrapcdn.com", "unpkg.com"],
       imgSrc: ["'self'", "data:", "*.basemaps.cartocdn.com", "unpkg.com", "cdnjs.cloudflare.com"],
@@ -135,7 +145,13 @@ morgan.format('botAware', function(tokens, req, res) {
 app.use(morgan('botAware', { stream: logger.stream }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, path, stat) => {
+    if (path.endsWith('.js')) {
+      res.set('Content-Type', 'application/javascript');
+    }
+  }
+}));
 
 // Apply CSRF protection to all routes except cache invalidation and file upload
 app.use(function(req, res, next) {
@@ -192,6 +208,7 @@ app.use('/', experimentalRouter);
 app.use('/', ultraDeepSoilRouter);
 app.use('/', monthlySoilRouter);
 app.use('/jobs', jobRouter);
+app.use('/admin', adminRouter);
 
 // Start the scheduler
 schedulerService.start().catch(err => {

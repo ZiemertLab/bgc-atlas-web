@@ -33,7 +33,7 @@ const storage = multer.diskStorage({
       const baseName = safeName.replace(/\.[^/.]+$/, "");
       // Generate a random 3-digit number for XXX
       const randomNum = Math.floor(Math.random() * 900) + 100; // 100-999
-      safeName = `${baseName}_region${randomNum}.gbk`;
+      safeName = `${baseName}.region${randomNum}.gbk`;
     }
 
     const uniqueName = `${uuidv4()}_${safeName}`;
@@ -56,33 +56,56 @@ const upload = multer({
 
 // Store connected SSE clients
 const clients = new Map();
+let cleanupTimer;
 
-// Periodically prune disconnected SSE clients
-setInterval(() => {
-  clients.forEach((client, id) => {
-    if (client.writableEnded || client.finished) {
-      clients.delete(id);
-      console.log(`Pruned client ${id}, total clients: ${clients.size}`);
-    }
-  });
-}, 30000);
+function startClientCleanupTimer() {
+  if (cleanupTimer) return;
+  const interval = parseInt(process.env.SSE_CLEANUP_INTERVAL, 10) || 30000;
+  cleanupTimer = setInterval(() => {
+    clients.forEach((client, id) => {
+      if (client.writableEnded || client.finished) {
+        clients.delete(id);
+        logger.info(`Removed inactive SSE client ${id} via timer, total clients: ${clients.size}`);
+      }
+    });
+  }, interval);
+}
+
+function stopClientCleanupTimer() {
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
+  }
+}
+
+startClientCleanupTimer();
+
 
 // SSE route
 router.get('/events', defaultRateLimiter, (req, res) => {
-  console.log('New SSE client connected');
+  logger.info('New SSE client connected');
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
   const clientId = Date.now();
   clients.set(clientId, res);
-  console.log(`Client ${clientId} connected, total clients: ${clients.size}`);
+  logger.info(`Client ${clientId} connected, total clients: ${clients.size}`);
 
-  res.on('error', (err) => {
-    console.error(`SSE stream error for client ${clientId}:`, err);
+  const cleanup = (label, err) => {
+    if (err) {
+      logger.error(`${label} for client ${clientId}:`, err);
+    } else {
+      console.log(`${label} for client ${clientId}`);
+    }
     clients.delete(clientId);
-    console.log(`Total clients after error: ${clients.size}`);
-  });
+    logger.info(`Total clients after ${label}: ${clients.size}`);
+  };
+
+  res.on('close', () => cleanup('response close'));
+  res.on('error', err => cleanup('SSE stream error', err));
+  req.on('close', () => cleanup('request close'));
+  req.on('error', err => cleanup('request error', err));
 
   // Send a test event to confirm connection and include queue status
   const schedulerService = require('../services/schedulerService');
@@ -96,31 +119,26 @@ router.get('/events', defaultRateLimiter, (req, res) => {
       }
     })}\n\n`);
   }).catch(err => {
-    console.error('Error retrieving queued jobs for SSE:', err);
+    logger.error('Error retrieving queued jobs for SSE:', err);
   });
 
-  req.on('close', () => {
-    console.log(`Client ${clientId} disconnected`);
-    clients.delete(clientId);
-    console.log(`Total clients after disconnect: ${clients.size}`);
-  });
 });
 
 // Function to send events to clients
 function sendEvent(message) {
-  console.log(`Sending SSE event to ${clients.size} clients:`, message);
+  logger.info(`Sending SSE event to ${clients.size} clients:`, message);
   clients.forEach((client, id) => {
     if (client.writableEnded || client.finished) {
       clients.delete(id);
-      console.log(`Removed ended SSE client ${id}, total clients: ${clients.size}`);
+      logger.info(`Removed ended SSE client ${id}, total clients: ${clients.size}`);
       return;
     }
     try {
       client.write(`data: ${JSON.stringify(message)}\n\n`);
     } catch (error) {
-      console.error('Error sending SSE event:', error);
+      logger.error('Error sending SSE event:', error);
       clients.delete(id);
-      console.log(`Total clients after write error: ${clients.size}`);
+      logger.info(`Total clients after write error: ${clients.size}`);
     }
   });
 }
@@ -172,3 +190,9 @@ router.post('/upload', (req, res, next) => {
 });
 
 module.exports = router;
+
+if (process.env.NODE_ENV === 'test') {
+  module.exports._clients = clients;
+  module.exports._startClientCleanupTimer = startClientCleanupTimer;
+  module.exports._stopClientCleanupTimer = stopClientCleanupTimer;
+}

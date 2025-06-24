@@ -104,12 +104,17 @@ function createMap() {
             L.DomEvent.on(btn, 'click', function() {
                 if (containedIDs.length > 0) {
                     // Construct the URL with the sample IDs
-                    var baseUrl = 'https://bgc-atlas.cs.uni-tuebingen.de/bgcs?samples=';
+                    // Get base URL and ensure it doesn't have a trailing slash
+                    let base = (window.APP_URL || '');
+                    if (base.endsWith('/')) {
+                        base = base.slice(0, -1);
+                    }
+                    var baseUrl = base + '/bgcs?samples=';
                     var sampleIdsParam = containedIDs.join(','); // Join the IDs with commas
                     var fullUrl = baseUrl + encodeURIComponent(sampleIdsParam);
 
-                    // Open the URL in a new tab or redirect
-                    window.open(fullUrl, '_blank'); // Opens in a new tab
+                    // Open the URL in a new tab using "noopener" for security
+                    window.open(fullUrl, '_blank', 'noopener'); // Opens in a new tab
                     // Alternatively, you can use window.location.href = fullUrl; to redirect in the same tab
                 } else {
                     alert("Please use the rectangle tool on the left-side to select a region for inspection.");
