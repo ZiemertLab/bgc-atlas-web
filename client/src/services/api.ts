@@ -25,6 +25,11 @@ export const getGrowthData = async () => {
 };
 
 // Browse API
+export const getStudies = async (params = {}) => {
+  const response = await api.get('/browse/studies', { params });
+  return response.data;
+};
+
 export const getBgcs = async (params = {}) => {
   const response = await api.get('/browse/bgcs', { params });
   return response.data;
@@ -42,6 +47,16 @@ export const getSamples = async (params = {}) => {
 
 export const getTaxonomy = async (params = {}) => {
   const response = await api.get('/browse/taxonomy', { params });
+  return response.data;
+};
+
+export const getRuns = async (params = {}) => {
+  const response = await api.get('/browse/runs', { params });
+  return response.data;
+};
+
+export const getBiomes = async (params = {}) => {
+  const response = await api.get('/browse/biomes', { params });
   return response.data;
 };
 
