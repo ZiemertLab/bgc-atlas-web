@@ -106,153 +106,36 @@ export function BrowseClient() {
     setBgcData(prev => ({ ...prev, page }));
   };
 
-  // Apply sorting to data
-  const sortedStudiesData = useMemo(() => {
-    if (!studiesSort.column || !studiesSort.direction || studiesData.data.length === 0) {
-      return studiesData.data;
-    }
+  // Page size change handlers for each table
+  const handleStudiesPageSizeChange = (pageSize: number) => {
+    setStudiesData(prev => ({ ...prev, limit: pageSize, page: 1 }));
+  };
 
-    return [...studiesData.data].sort((a, b) => {
-      const aValue = a[studiesSort.column];
-      const bValue = b[studiesSort.column];
+  const handleSamplesPageSizeChange = (pageSize: number) => {
+    setSampleData(prev => ({ ...prev, limit: pageSize, page: 1 }));
+  };
 
-      // Handle null/undefined values
-      if (aValue == null) return studiesSort.direction === "asc" ? -1 : 1;
-      if (bValue == null) return studiesSort.direction === "asc" ? 1 : -1;
+  const handleRunsPageSizeChange = (pageSize: number) => {
+    setRunsData(prev => ({ ...prev, limit: pageSize, page: 1 }));
+  };
 
-      // Compare based on data type
-      if (typeof aValue === "string" && typeof bValue === "string") {
-        return studiesSort.direction === "asc" 
-          ? aValue.localeCompare(bValue) 
-          : bValue.localeCompare(aValue);
-      }
+  const handleBiomesPageSizeChange = (pageSize: number) => {
+    setBiomesData(prev => ({ ...prev, limit: pageSize, page: 1 }));
+  };
 
-      // For numbers and other types
-      return studiesSort.direction === "asc" 
-        ? (aValue > bValue ? 1 : -1) 
-        : (aValue > bValue ? -1 : 1);
-    });
-  }, [studiesData.data, studiesSort]);
+  const handleGcfsPageSizeChange = (pageSize: number) => {
+    setGcfData(prev => ({ ...prev, limit: pageSize, page: 1 }));
+  };
 
-  const sortedSamplesData = useMemo(() => {
-    if (!samplesSort.column || !samplesSort.direction || sampleData.data.length === 0) {
-      return sampleData.data;
-    }
+  const handleTaxonomyPageSizeChange = (pageSize: number) => {
+    setTaxonomyData(prev => ({ ...prev, limit: pageSize, page: 1 }));
+  };
 
-    return [...sampleData.data].sort((a, b) => {
-      const aValue = a[samplesSort.column];
-      const bValue = b[samplesSort.column];
+  const handleBgcsPageSizeChange = (pageSize: number) => {
+    setBgcData(prev => ({ ...prev, limit: pageSize, page: 1 }));
+  };
 
-      if (aValue == null) return samplesSort.direction === "asc" ? -1 : 1;
-      if (bValue == null) return samplesSort.direction === "asc" ? 1 : -1;
-
-      if (typeof aValue === "string" && typeof bValue === "string") {
-        return samplesSort.direction === "asc" 
-          ? aValue.localeCompare(bValue) 
-          : bValue.localeCompare(aValue);
-      }
-
-      return samplesSort.direction === "asc" 
-        ? (aValue > bValue ? 1 : -1) 
-        : (aValue > bValue ? -1 : 1);
-    });
-  }, [sampleData.data, samplesSort]);
-
-  const sortedRunsData = useMemo(() => {
-    if (!runsSort.column || !runsSort.direction || runsData.data.length === 0) {
-      return runsData.data;
-    }
-
-    return [...runsData.data].sort((a, b) => {
-      const aValue = a[runsSort.column];
-      const bValue = b[runsSort.column];
-
-      if (aValue == null) return runsSort.direction === "asc" ? -1 : 1;
-      if (bValue == null) return runsSort.direction === "asc" ? 1 : -1;
-
-      if (typeof aValue === "string" && typeof bValue === "string") {
-        return runsSort.direction === "asc" 
-          ? aValue.localeCompare(bValue) 
-          : bValue.localeCompare(aValue);
-      }
-
-      return runsSort.direction === "asc" 
-        ? (aValue > bValue ? 1 : -1) 
-        : (aValue > bValue ? -1 : 1);
-    });
-  }, [runsData.data, runsSort]);
-
-  const sortedBiomesData = useMemo(() => {
-    if (!biomesSort.column || !biomesSort.direction || biomesData.data.length === 0) {
-      return biomesData.data;
-    }
-
-    return [...biomesData.data].sort((a, b) => {
-      const aValue = a[biomesSort.column];
-      const bValue = b[biomesSort.column];
-
-      if (aValue == null) return biomesSort.direction === "asc" ? -1 : 1;
-      if (bValue == null) return biomesSort.direction === "asc" ? 1 : -1;
-
-      if (typeof aValue === "string" && typeof bValue === "string") {
-        return biomesSort.direction === "asc" 
-          ? aValue.localeCompare(bValue) 
-          : bValue.localeCompare(aValue);
-      }
-
-      return biomesSort.direction === "asc" 
-        ? (aValue > bValue ? 1 : -1) 
-        : (aValue > bValue ? -1 : 1);
-    });
-  }, [biomesData.data, biomesSort]);
-
-  const sortedGcfsData = useMemo(() => {
-    if (!gcfsSort.column || !gcfsSort.direction || gcfData.data.length === 0) {
-      return gcfData.data;
-    }
-
-    return [...gcfData.data].sort((a, b) => {
-      const aValue = a[gcfsSort.column];
-      const bValue = b[gcfsSort.column];
-
-      if (aValue == null) return gcfsSort.direction === "asc" ? -1 : 1;
-      if (bValue == null) return gcfsSort.direction === "asc" ? 1 : -1;
-
-      if (typeof aValue === "string" && typeof bValue === "string") {
-        return gcfsSort.direction === "asc" 
-          ? aValue.localeCompare(bValue) 
-          : bValue.localeCompare(aValue);
-      }
-
-      return gcfsSort.direction === "asc" 
-        ? (aValue > bValue ? 1 : -1) 
-        : (aValue > bValue ? -1 : 1);
-    });
-  }, [gcfData.data, gcfsSort]);
-
-  const sortedBgcsData = useMemo(() => {
-    if (!bgcsSort.column || !bgcsSort.direction || bgcData.data.length === 0) {
-      return bgcData.data;
-    }
-
-    return [...bgcData.data].sort((a, b) => {
-      const aValue = a[bgcsSort.column];
-      const bValue = b[bgcsSort.column];
-
-      if (aValue == null) return bgcsSort.direction === "asc" ? -1 : 1;
-      if (bValue == null) return bgcsSort.direction === "asc" ? 1 : -1;
-
-      if (typeof aValue === "string" && typeof bValue === "string") {
-        return bgcsSort.direction === "asc" 
-          ? aValue.localeCompare(bValue) 
-          : bValue.localeCompare(aValue);
-      }
-
-      return bgcsSort.direction === "asc" 
-        ? (aValue > bValue ? 1 : -1) 
-        : (aValue > bValue ? -1 : 1);
-    });
-  }, [bgcData.data, bgcsSort]);
+  // Server-side sorting is now used, so we don't need to sort the data client-side
 
   useEffect(() => {
     const fetchData = async () => {
@@ -262,37 +145,79 @@ export function BrowseClient() {
         // Only fetch data for the active tab to improve performance
         if (activeTab === "studies") {
           const { page, limit } = studiesData;
-          const response = await getStudies({ page, limit });
+          const { column, direction } = studiesSort;
+          const response = await getStudies({ 
+            page, 
+            limit,
+            sortColumn: column || undefined,
+            sortDirection: direction || undefined
+          });
           console.log("Studies data:", response);
           setStudiesData(prev => ({ ...prev, ...response }));
         } else if (activeTab === "bgcs") {
           const { page, limit } = bgcData;
-          const response = await getBgcs({ page, limit });
+          const { column, direction } = bgcsSort;
+          const response = await getBgcs({ 
+            page, 
+            limit,
+            sortColumn: column || undefined,
+            sortDirection: direction || undefined
+          });
           console.log("BGCs data:", response);
           setBgcData(prev => ({ ...prev, ...response }));
         } else if (activeTab === "gcfs") {
           const { page, limit } = gcfData;
-          const response = await getGcfs({ page, limit });
+          const { column, direction } = gcfsSort;
+          const response = await getGcfs({ 
+            page, 
+            limit,
+            sortColumn: column || undefined,
+            sortDirection: direction || undefined
+          });
           console.log("GCFs data:", response);
           setGcfData(prev => ({ ...prev, ...response }));
         } else if (activeTab === "samples") {
           const { page, limit } = sampleData;
-          const response = await getSamples({ page, limit });
+          const { column, direction } = samplesSort;
+          const response = await getSamples({ 
+            page, 
+            limit,
+            sortColumn: column || undefined,
+            sortDirection: direction || undefined
+          });
           console.log("Samples data:", response);
           setSampleData(prev => ({ ...prev, ...response }));
         } else if (activeTab === "taxonomy") {
           const { page, limit } = taxonomyData;
-          const response = await getTaxonomy({ page, limit });
+          const { column, direction } = taxonomySort;
+          const response = await getTaxonomy({ 
+            page, 
+            limit,
+            sortColumn: column || undefined,
+            sortDirection: direction || undefined
+          });
           console.log("Taxonomy data:", response);
           setTaxonomyData(prev => ({ ...prev, ...response }));
         } else if (activeTab === "runs") {
           const { page, limit } = runsData;
-          const response = await getRuns({ page, limit });
+          const { column, direction } = runsSort;
+          const response = await getRuns({ 
+            page, 
+            limit,
+            sortColumn: column || undefined,
+            sortDirection: direction || undefined
+          });
           console.log("Runs data:", response);
           setRunsData(prev => ({ ...prev, ...response }));
         } else if (activeTab === "biomes") {
           const { page, limit } = biomesData;
-          const response = await getBiomes({ page, limit });
+          const { column, direction } = biomesSort;
+          const response = await getBiomes({ 
+            page, 
+            limit,
+            sortColumn: column || undefined,
+            sortDirection: direction || undefined
+          });
           console.log("Biomes data:", response);
           setBiomesData(prev => ({ ...prev, ...response }));
         }
@@ -305,13 +230,13 @@ export function BrowseClient() {
 
     fetchData();
   }, [activeTab, 
-      studiesData.page, studiesData.limit,
-      bgcData.page, bgcData.limit,
-      gcfData.page, gcfData.limit,
-      sampleData.page, sampleData.limit,
-      taxonomyData.page, taxonomyData.limit,
-      runsData.page, runsData.limit,
-      biomesData.page, biomesData.limit
+      studiesData.page, studiesData.limit, studiesSort,
+      bgcData.page, bgcData.limit, bgcsSort,
+      gcfData.page, gcfData.limit, gcfsSort,
+      sampleData.page, sampleData.limit, samplesSort,
+      taxonomyData.page, taxonomyData.limit, taxonomySort,
+      runsData.page, runsData.limit, runsSort,
+      biomesData.page, biomesData.limit, biomesSort
   ]);
 
   const renderEmptyState = (item: string) => (
@@ -350,7 +275,7 @@ export function BrowseClient() {
               render: (row) => `${row.contig}:${row.start}-${row.end_pos}`
             }
           ]}
-          data={sortedBgcsData}
+          data={bgcData.data}
           total={bgcData.total}
           page={bgcData.page}
           limit={bgcData.limit}
@@ -358,6 +283,7 @@ export function BrowseClient() {
           sortState={bgcsSort}
           onSort={handleBgcsSort}
           onPageChange={handleBgcsPageChange}
+          onPageSizeChange={handleBgcsPageSizeChange}
         />
       </CardContent>
     </Card>
@@ -379,7 +305,7 @@ export function BrowseClient() {
               sortable: true
             }
           ]}
-          data={sortedGcfsData}
+          data={gcfData.data}
           total={gcfData.total}
           page={gcfData.page}
           limit={gcfData.limit}
@@ -387,6 +313,7 @@ export function BrowseClient() {
           sortState={gcfsSort}
           onSort={handleGcfsSort}
           onPageChange={handleGcfsPageChange}
+          onPageSizeChange={handleGcfsPageSizeChange}
         />
       </CardContent>
     </Card>
@@ -529,7 +456,7 @@ export function BrowseClient() {
                         render: (row) => row.bgc_count || 0
                       }
                     ]}
-                    data={sortedStudiesData}
+                    data={studiesData.data}
                     total={studiesData.total}
                     page={studiesData.page}
                     limit={studiesData.limit}
@@ -537,6 +464,7 @@ export function BrowseClient() {
                     sortState={studiesSort}
                     onSort={handleStudiesSort}
                     onPageChange={handleStudiesPageChange}
+                    onPageSizeChange={handleStudiesPageSizeChange}
                   />
                 </CardContent>
               </Card>
@@ -577,7 +505,7 @@ export function BrowseClient() {
                         render: (row) => row.bgc_count || 0
                       }
                     ]}
-                    data={sortedSamplesData}
+                    data={sampleData.data}
                     total={sampleData.total}
                     page={sampleData.page}
                     limit={sampleData.limit}
@@ -585,6 +513,7 @@ export function BrowseClient() {
                     sortState={samplesSort}
                     onSort={handleSamplesSort}
                     onPageChange={handleSamplesPageChange}
+                    onPageSizeChange={handleSamplesPageSizeChange}
                   />
                 </CardContent>
               </Card>
@@ -625,7 +554,7 @@ export function BrowseClient() {
                         render: (row) => row.bgc_count || 0
                       }
                     ]}
-                    data={sortedRunsData}
+                    data={runsData.data}
                     total={runsData.total}
                     page={runsData.page}
                     limit={runsData.limit}
@@ -633,6 +562,7 @@ export function BrowseClient() {
                     sortState={runsSort}
                     onSort={handleRunsSort}
                     onPageChange={handleRunsPageChange}
+                    onPageSizeChange={handleRunsPageSizeChange}
                   />
                 </CardContent>
               </Card>
@@ -661,7 +591,7 @@ export function BrowseClient() {
                         render: (row) => row.bgc_count || 0
                       }
                     ]}
-                    data={sortedBiomesData}
+                    data={biomesData.data}
                     total={biomesData.total}
                     page={biomesData.page}
                     limit={biomesData.limit}
@@ -669,6 +599,7 @@ export function BrowseClient() {
                     sortState={biomesSort}
                     onSort={handleBiomesSort}
                     onPageChange={handleBiomesPageChange}
+                    onPageSizeChange={handleBiomesPageSizeChange}
                   />
                 </CardContent>
               </Card>

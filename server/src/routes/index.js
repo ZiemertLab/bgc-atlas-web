@@ -77,6 +77,15 @@ router.get('/browse/studies', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
+    const sortColumn = req.query.sortColumn || 'public_release_date';
+    const sortDirection = req.query.sortDirection || 'desc';
+
+    // Validate sort parameters to prevent SQL injection
+    const validColumns = ['accession', 'study_name', 'bioproject', 'public_release_date', 'bgc_count'];
+    const validDirections = ['asc', 'desc'];
+
+    const column = validColumns.includes(sortColumn) ? sortColumn : 'public_release_date';
+    const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'desc';
 
     // Get studies with pagination and BGC count
     const studiesResult = await db.query(`
@@ -91,7 +100,7 @@ router.get('/browse/studies', async (req, res) => {
          JOIN study_samples ss ON samp.id = ss.sample_id
          WHERE ss.study_id = s.id) AS bgc_count
       FROM studies s
-      ORDER BY public_release_date DESC
+      ORDER BY ${column === 'bgc_count' ? 'bgc_count' : 's.' + column} ${direction}
       LIMIT $1 OFFSET $2
     `, [limit, offset]);
 
@@ -116,6 +125,15 @@ router.get('/browse/samples', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
+    const sortColumn = req.query.sortColumn || 'collection_date';
+    const sortDirection = req.query.sortDirection || 'desc';
+
+    // Validate sort parameters to prevent SQL injection
+    const validColumns = ['accession', 'sample_name', 'environment_biome', 'collection_date', 'bgc_count'];
+    const validDirections = ['asc', 'desc'];
+
+    const column = validColumns.includes(sortColumn) ? sortColumn : 'collection_date';
+    const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'desc';
 
     // Get samples with pagination and BGC count
     const samplesResult = await db.query(`
@@ -128,7 +146,7 @@ router.get('/browse/samples', async (req, res) => {
          JOIN sample_runs sr ON r.id = sr.run_id
          WHERE sr.sample_id = s.id) AS bgc_count
       FROM samples s
-      ORDER BY collection_date DESC
+      ORDER BY ${column === 'bgc_count' ? 'bgc_count' : 's.' + column} ${direction}
       LIMIT $1 OFFSET $2
     `, [limit, offset]);
 
@@ -153,6 +171,15 @@ router.get('/browse/runs', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
+    const sortColumn = req.query.sortColumn || 'accession';
+    const sortDirection = req.query.sortDirection || 'asc';
+
+    // Validate sort parameters to prevent SQL injection
+    const validColumns = ['accession', 'sample_name', 'experiment_type', 'instrument_platform', 'bgc_count'];
+    const validDirections = ['asc', 'desc'];
+
+    const column = validColumns.includes(sortColumn) ? sortColumn : 'accession';
+    const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc';
 
     // Get runs with pagination and BGC count
     const runsResult = await db.query(`
@@ -164,7 +191,7 @@ router.get('/browse/runs', async (req, res) => {
          WHERE ra.run_id = r.id) AS bgc_count
       FROM runs r
       JOIN samples s ON r.sample_id = s.id
-      ORDER BY r.accession
+      ORDER BY ${column === 'sample_name' ? 's.sample_name' : column === 'bgc_count' ? 'bgc_count' : 'r.' + column} ${direction}
       LIMIT $1 OFFSET $2
     `, [limit, offset]);
 
@@ -189,6 +216,15 @@ router.get('/browse/biomes', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
+    const sortColumn = req.query.sortColumn || 'id';
+    const sortDirection = req.query.sortDirection || 'asc';
+
+    // Validate sort parameters to prevent SQL injection
+    const validColumns = ['id', 'lineage', 'bgc_count'];
+    const validDirections = ['asc', 'desc'];
+
+    const column = validColumns.includes(sortColumn) ? sortColumn : 'id';
+    const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc';
 
     // Get biomes with pagination and BGC count
     const biomesResult = await db.query(`
@@ -203,7 +239,7 @@ router.get('/browse/biomes', async (req, res) => {
          JOIN sample_biomes sb ON s.id = sb.sample_id
          WHERE sb.biome_id = b.id) AS bgc_count
       FROM biomes b
-      ORDER BY id
+      ORDER BY ${column === 'bgc_count' ? 'bgc_count' : 'b.' + column} ${direction}
       LIMIT $1 OFFSET $2
     `, [limit, offset]);
 
@@ -228,13 +264,22 @@ router.get('/browse/bgcs', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
+    const sortColumn = req.query.sortColumn || 'id';
+    const sortDirection = req.query.sortDirection || 'asc';
+
+    // Validate sort parameters to prevent SQL injection
+    const validColumns = ['id', 'product_class', 'assembly_accession', 'contig'];
+    const validDirections = ['asc', 'desc'];
+
+    const column = validColumns.includes(sortColumn) ? sortColumn : 'id';
+    const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc';
 
     // Get BGCs with pagination, joining with assemblies to get assembly info
     const bgcsResult = await db.query(`
       SELECT b.*, a.accession as assembly_accession 
       FROM bgcs b
       JOIN assemblies a ON b.assembly = a.id
-      ORDER BY b.id
+      ORDER BY ${column === 'assembly_accession' ? 'a.accession' : 'b.' + column} ${direction}
       LIMIT $1 OFFSET $2
     `, [limit, offset]);
 
@@ -259,6 +304,15 @@ router.get('/browse/gcfs', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
+    const sortColumn = req.query.sortColumn || 'id';
+    const sortDirection = req.query.sortDirection || 'asc';
+
+    // Validate sort parameters to prevent SQL injection
+    const validColumns = ['id', 'bgc_count'];
+    const validDirections = ['asc', 'desc'];
+
+    const column = validColumns.includes(sortColumn) ? sortColumn : 'id';
+    const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc';
 
     // Get GCFs with pagination, including a count of BGCs in each GCF
     const gcfsResult = await db.query(`
@@ -266,7 +320,7 @@ router.get('/browse/gcfs', async (req, res) => {
       FROM gcfs g
       LEFT JOIN bgcs b ON g.id = b.gcf_id
       GROUP BY g.id
-      ORDER BY g.id
+      ORDER BY ${column === 'id' ? 'g.id' : column} ${direction}
       LIMIT $1 OFFSET $2
     `, [limit, offset]);
 
