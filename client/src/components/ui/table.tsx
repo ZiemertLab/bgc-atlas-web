@@ -2,6 +2,8 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+type SortDirection = "asc" | "desc" | null
+
 const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
@@ -66,20 +68,82 @@ const TableRow = React.forwardRef<
 ))
 TableRow.displayName = "TableRow"
 
-const TableHead = React.forwardRef<
-  HTMLTableCellElement,
-  React.ThHTMLAttributes<HTMLTableCellElement>
->(({ className, ...props }, ref) => (
-  <th
-    ref={ref}
-    className={cn(
-      "h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
-      className
-    )}
-    {...props}
-  />
-))
+interface TableHeadProps extends React.ThHTMLAttributes<HTMLTableCellElement> {
+  sortable?: boolean
+  sortDirection?: SortDirection
+  onSort?: () => void
+}
+
+const TableHead = React.forwardRef<HTMLTableCellElement, TableHeadProps>(
+  ({ className, sortable, sortDirection, onSort, children, ...props }, ref) => (
+    <th
+      ref={ref}
+      className={cn(
+        "h-12 px-4 text-left align-middle font-bold text-muted-foreground [&:has([role=checkbox])]:pr-0",
+        sortable && "cursor-pointer select-none",
+        className
+      )}
+      onClick={sortable ? onSort : undefined}
+      {...props}
+    >
+      <div className="flex items-center gap-1">
+        {children}
+        {sortable && (
+          <div className="flex flex-col ml-1">
+            <ChevronUp 
+              className={cn(
+                "h-3 w-3 text-muted-foreground/50", 
+                sortDirection === "asc" && "text-foreground"
+              )} 
+            />
+            <ChevronDown 
+              className={cn(
+                "h-3 w-3 text-muted-foreground/50", 
+                sortDirection === "desc" && "text-foreground"
+              )} 
+            />
+          </div>
+        )}
+      </div>
+    </th>
+  )
+)
 TableHead.displayName = "TableHead"
+
+// Chevron icons for sort indicators
+const ChevronUp = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="m18 15-6-6-6 6"/>
+  </svg>
+)
+
+const ChevronDown = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="m6 9 6 6 6-6"/>
+  </svg>
+)
 
 const TableCell = React.forwardRef<
   HTMLTableCellElement,

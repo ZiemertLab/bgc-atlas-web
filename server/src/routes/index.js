@@ -75,7 +75,7 @@ router.get('/stats/growth', async (req, res) => {
 router.get('/browse/studies', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
 
     // Get studies with pagination and BGC count
@@ -114,7 +114,7 @@ router.get('/browse/studies', async (req, res) => {
 router.get('/browse/samples', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
 
     // Get samples with pagination and BGC count
@@ -151,7 +151,7 @@ router.get('/browse/samples', async (req, res) => {
 router.get('/browse/runs', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
 
     // Get runs with pagination and BGC count
@@ -187,7 +187,7 @@ router.get('/browse/runs', async (req, res) => {
 router.get('/browse/biomes', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
 
     // Get biomes with pagination and BGC count
@@ -226,7 +226,7 @@ router.get('/browse/biomes', async (req, res) => {
 router.get('/browse/bgcs', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
 
     // Get BGCs with pagination, joining with assemblies to get assembly info
@@ -257,7 +257,7 @@ router.get('/browse/bgcs', async (req, res) => {
 router.get('/browse/gcfs', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
 
     // Get GCFs with pagination, including a count of BGCs in each GCF
