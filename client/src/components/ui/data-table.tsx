@@ -71,8 +71,10 @@ export function DataTable({
   onPageSizeChange
 }: DataTableProps) {
   const totalPages = Math.ceil(total / limit);
-  const [goToPage, setGoToPage] = useState<string>("");
-  const inputRef = React.useRef<HTMLInputElement>(null);
+  const [topGoToPage, setTopGoToPage] = useState<string>("");
+  const [bottomGoToPage, setBottomGoToPage] = useState<string>("");
+  const topInputRef = React.useRef<HTMLInputElement>(null);
+  const bottomInputRef = React.useRef<HTMLInputElement>(null);
 
   // Available page sizes
   const pageSizes = [10, 25, 50, 100];
@@ -127,22 +129,34 @@ export function DataTable({
     return pageNumbers;
   };
 
-  const handleGoToPage = () => {
-    const pageNumber = parseInt(goToPage);
+  const handleGoToPage = (inputValue: string, setInputValue: React.Dispatch<React.SetStateAction<string>>) => {
+    const pageNumber = parseInt(inputValue);
     if (!isNaN(pageNumber) && pageNumber >= 1 && pageNumber <= totalPages) {
       onPageChange(pageNumber);
     }
-    setGoToPage("");
+    setInputValue("");
   };
 
-  const handleGoToPageKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleGoToPageKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>, 
+    inputValue: string, 
+    setInputValue: React.Dispatch<React.SetStateAction<string>>
+  ) => {
     if (e.key === 'Enter') {
-      handleGoToPage();
+      handleGoToPage(inputValue, setInputValue);
     }
   };
 
   // Reusable pagination controls component
-  const PaginationControls = () => (
+  const PaginationControls = ({
+    inputRef,
+    goToPage,
+    setGoToPage
+  }: {
+    inputRef: React.RefObject<HTMLInputElement>,
+    goToPage: string,
+    setGoToPage: React.Dispatch<React.SetStateAction<string>>
+  }) => (
     <div className="flex items-center justify-between">
       <Pagination>
         <PaginationContent>
@@ -205,13 +219,13 @@ export function DataTable({
                 inputRef.current?.focus();
               }, 0);
             }}
-            onKeyDown={handleGoToPageKeyDown}
+            onKeyDown={(e) => handleGoToPageKeyDown(e, goToPage, setGoToPage)}
             placeholder="Page"
             className="w-28 h-9"
             disabled={loading}
           />
           <Button 
-            onClick={handleGoToPage} 
+            onClick={() => handleGoToPage(goToPage, setGoToPage)} 
             size="sm"
             disabled={loading || !goToPage}
           >
@@ -253,7 +267,11 @@ export function DataTable({
       {/* Top pagination controls */}
       {totalPages > 1 && (
         <div className="mb-4">
-          <PaginationControls />
+          <PaginationControls 
+            inputRef={topInputRef}
+            goToPage={topGoToPage}
+            setGoToPage={setTopGoToPage}
+          />
         </div>
       )}
 
@@ -311,7 +329,11 @@ export function DataTable({
       {/* Bottom pagination controls */}
       {totalPages > 1 && (
         <div className="mt-4">
-          <PaginationControls />
+          <PaginationControls 
+            inputRef={bottomInputRef}
+            goToPage={bottomGoToPage}
+            setGoToPage={setBottomGoToPage}
+          />
         </div>
       )}
 
