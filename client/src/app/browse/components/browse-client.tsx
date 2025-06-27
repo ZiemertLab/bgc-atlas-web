@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { getBgcs, getGcfs, getSamples, getTaxonomy, getRuns, getBiomes, getStudies } from "@/services/api";
+import { getBgcs, getGcfs, getSamples, getTaxonomy, getRuns, getBiomes, getStudies, getAssemblies } from "@/services/api";
 
 // Type for sort state
 type SortState = {
@@ -35,6 +35,7 @@ export function BrowseClient() {
   const [runsData, setRunsData] = useState({ data: [], total: 0, page: 1, limit: 10 });
   const [biomesData, setBiomesData] = useState({ data: [], total: 0, page: 1, limit: 10 });
   const [studiesData, setStudiesData] = useState({ data: [], total: 0, page: 1, limit: 10 });
+  const [assembliesData, setAssembliesData] = useState({ data: [], total: 0, page: 1, limit: 10 });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("studies");
   const [filtersVisible, setFiltersVisible] = useState(true);
@@ -47,6 +48,7 @@ export function BrowseClient() {
   const [gcfsSort, setGcfsSort] = useState<SortState>({ column: "", direction: null });
   const [taxonomySort, setTaxonomySort] = useState<SortState>({ column: "", direction: null });
   const [bgcsSort, setBgcsSort] = useState<SortState>({ column: "", direction: null });
+  const [assembliesSort, setAssembliesSort] = useState<SortState>({ column: "", direction: null });
 
   // Generic sorting function
   const handleSort = (
@@ -76,6 +78,7 @@ export function BrowseClient() {
   const handleGcfsSort = (column: string) => handleSort(column, gcfsSort, setGcfsSort);
   const handleTaxonomySort = (column: string) => handleSort(column, taxonomySort, setTaxonomySort);
   const handleBgcsSort = (column: string) => handleSort(column, bgcsSort, setBgcsSort);
+  const handleAssembliesSort = (column: string) => handleSort(column, assembliesSort, setAssembliesSort);
 
   // Page change handlers for each table
   const handleStudiesPageChange = (page: number) => {
@@ -106,6 +109,10 @@ export function BrowseClient() {
     setBgcData(prev => ({ ...prev, page }));
   };
 
+  const handleAssembliesPageChange = (page: number) => {
+    setAssembliesData(prev => ({ ...prev, page }));
+  };
+
   // Page size change handlers for each table
   const handleStudiesPageSizeChange = (pageSize: number) => {
     setStudiesData(prev => ({ ...prev, limit: pageSize, page: 1 }));
@@ -133,6 +140,10 @@ export function BrowseClient() {
 
   const handleBgcsPageSizeChange = (pageSize: number) => {
     setBgcData(prev => ({ ...prev, limit: pageSize, page: 1 }));
+  };
+
+  const handleAssembliesPageSizeChange = (pageSize: number) => {
+    setAssembliesData(prev => ({ ...prev, limit: pageSize, page: 1 }));
   };
 
   // Server-side sorting is now used, so we don't need to sort the data client-side
@@ -220,6 +231,17 @@ export function BrowseClient() {
           });
           console.log("Biomes data:", response);
           setBiomesData(prev => ({ ...prev, ...response }));
+        } else if (activeTab === "assemblies") {
+          const { page, limit } = assembliesData;
+          const { column, direction } = assembliesSort;
+          const response = await getAssemblies({ 
+            page, 
+            limit,
+            sortColumn: column || undefined,
+            sortDirection: direction || undefined
+          });
+          console.log("Assemblies data:", response);
+          setAssembliesData(prev => ({ ...prev, ...response }));
         }
       } catch (error) {
         console.error(`Error fetching ${activeTab} data:`, error);
@@ -236,7 +258,8 @@ export function BrowseClient() {
       sampleData.page, sampleData.limit, samplesSort,
       taxonomyData.page, taxonomyData.limit, taxonomySort,
       runsData.page, runsData.limit, runsSort,
-      biomesData.page, biomesData.limit, biomesSort
+      biomesData.page, biomesData.limit, biomesSort,
+      assembliesData.page, assembliesData.limit, assembliesSort
   ]);
 
   const renderEmptyState = (item: string) => (
@@ -314,6 +337,53 @@ export function BrowseClient() {
           onSort={handleGcfsSort}
           onPageChange={handleGcfsPageChange}
           onPageSizeChange={handleGcfsPageSizeChange}
+        />
+      </CardContent>
+    </Card>
+  );
+
+  const renderAssembliesTable = () => (
+    <Card>
+      <CardContent className="p-0">
+        <DataTable
+          columns={[
+            {
+              key: "id",
+              label: "ID",
+              sortable: true
+            },
+            {
+              key: "accession",
+              label: "Accession",
+              sortable: true
+            },
+            {
+              key: "wgs_accession",
+              label: "WGS Accession",
+              sortable: true,
+              render: (row) => row.wgs_accession || 'N/A'
+            },
+            {
+              key: "coverage",
+              label: "Coverage",
+              sortable: true,
+              render: (row) => row.coverage ? `${row.coverage}x` : 'N/A'
+            },
+            {
+              key: "bgc_count",
+              label: "# BGCs",
+              sortable: true
+            }
+          ]}
+          data={assembliesData.data}
+          total={assembliesData.total}
+          page={assembliesData.page}
+          limit={assembliesData.limit}
+          loading={loading}
+          sortState={assembliesSort}
+          onSort={handleAssembliesSort}
+          onPageChange={handleAssembliesPageChange}
+          onPageSizeChange={handleAssembliesPageSizeChange}
         />
       </CardContent>
     </Card>
@@ -412,11 +482,12 @@ export function BrowseClient() {
           </div>
         )}
         <Tabs defaultValue="studies" value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="grid w-full grid-cols-8">
             <TabsTrigger value="studies">Studies</TabsTrigger>
             <TabsTrigger value="samples">Samples</TabsTrigger>
             <TabsTrigger value="runs">Runs</TabsTrigger>
             <TabsTrigger value="biomes">Biomes</TabsTrigger>
+            <TabsTrigger value="assemblies">Assemblies</TabsTrigger>
             <TabsTrigger value="gcfs">GCFs</TabsTrigger>
             <TabsTrigger value="taxonomy">Taxonomy</TabsTrigger>
             <TabsTrigger value="bgcs">BGCs</TabsTrigger>
@@ -604,6 +675,9 @@ export function BrowseClient() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+          <TabsContent value="assemblies" className="mt-6">
+            {assembliesData.data.length === 0 && !loading ? renderEmptyState("Assemblies") : renderAssembliesTable()}
           </TabsContent>
           <TabsContent value="gcfs" className="mt-6">
             {gcfData.data.length === 0 && !loading ? renderEmptyState("GCFs") : renderGcfTable()}

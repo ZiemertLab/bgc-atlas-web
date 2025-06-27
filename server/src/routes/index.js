@@ -340,4 +340,45 @@ router.get('/browse/gcfs', async (req, res) => {
   }
 });
 
+router.get('/browse/assemblies', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 100;
+    const offset = (page - 1) * limit;
+    const sortColumn = req.query.sortColumn || 'id';
+    const sortDirection = req.query.sortDirection || 'asc';
+
+    // Validate sort parameters to prevent SQL injection
+    const validColumns = ['id', 'accession', 'wgs_accession', 'coverage', 'bgc_count'];
+    const validDirections = ['asc', 'desc'];
+
+    const column = validColumns.includes(sortColumn) ? sortColumn : 'id';
+    const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc';
+
+    // Get assemblies with pagination, including a count of BGCs in each assembly
+    const assembliesResult = await db.query(`
+      SELECT a.id, a.accession, a.wgs_accession, a.coverage, COUNT(b.id) as bgc_count
+      FROM assemblies a
+      LEFT JOIN bgcs b ON a.id = b.assembly
+      GROUP BY a.id, a.accession, a.wgs_accession, a.coverage
+      ORDER BY ${column === 'bgc_count' ? 'bgc_count' : 'a.' + column} ${direction}
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+
+    // Get total count
+    const countResult = await db.query('SELECT COUNT(*) FROM assemblies');
+    const total = parseInt(countResult.rows[0].count);
+
+    res.json({
+      data: assembliesResult.rows,
+      total,
+      page,
+      limit
+    });
+  } catch (error) {
+    console.error('Error fetching assemblies:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;
