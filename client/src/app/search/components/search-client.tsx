@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { UploadCloud, X } from "lucide-react";
 import { useRef, useState } from "react";
+import { toast } from "@/hooks/use-toast";
 
 // Define a type for uploaded files
 type UploadedFile = {
@@ -23,10 +24,12 @@ export function SearchClient() {
   const [fastaFiles, setFastaFiles] = useState<UploadedFile[]>([]);
   const [searchAlgorithm, setSearchAlgorithm] = useState("diamond");
   const [searchCompleteSetOnly, setSearchCompleteSetOnly] = useState(false);
+  const [isSequenceSearchLoading, setIsSequenceSearchLoading] = useState(false);
   const fastaFileInputRef = useRef<HTMLInputElement>(null);
 
   // BGC search state
   const [gbkFiles, setGbkFiles] = useState<UploadedFile[]>([]);
+  const [isBgcSearchLoading, setIsBgcSearchLoading] = useState(false);
   const gbkFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFastaFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,6 +82,242 @@ export function SearchClient() {
 
   const handleRemoveGbkFile = (index: number) => {
     setGbkFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // State for job tracking
+  const [sequenceJobId, setSequenceJobId] = useState<string | null>(null);
+  const [sequenceJobStatus, setSequenceJobStatus] = useState<string | null>(null);
+  const [sequenceJobProgress, setSequenceJobProgress] = useState<number>(0);
+  const [sequenceJobResults, setSequenceJobResults] = useState<any>(null);
+  const [isPollingSequenceJob, setIsPollingSequenceJob] = useState<boolean>(false);
+
+  // Function to poll job status
+  const pollSequenceJobStatus = async (jobId: string) => {
+    if (!jobId) return;
+
+    setIsPollingSequenceJob(true);
+
+    try {
+      const response = await fetch(`/api/search/status/${jobId}?type=sequence`);
+
+      if (!response.ok) {
+        throw new Error('Failed to get job status');
+      }
+
+      const data = await response.json();
+
+      setSequenceJobStatus(data.state);
+      setSequenceJobProgress(data.progress || 0);
+
+      if (data.state === 'completed' && data.result) {
+        setSequenceJobResults(data.result);
+        setIsPollingSequenceJob(false);
+
+        toast({
+          title: "Search completed",
+          description: "Your sequence search has completed successfully.",
+        });
+      } else if (data.state === 'failed') {
+        setIsPollingSequenceJob(false);
+
+        toast({
+          title: "Search failed",
+          description: "Your sequence search has failed. Please try again.",
+          variant: "destructive",
+        });
+      } else {
+        // Continue polling if job is still in progress
+        setTimeout(() => pollSequenceJobStatus(jobId), 2000);
+      }
+    } catch (error) {
+      console.error('Error polling job status:', error);
+      setIsPollingSequenceJob(false);
+
+      toast({
+        title: "Error",
+        description: "Failed to get job status. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Function to handle sequence search
+  const handleSequenceSearch = async () => {
+    if (fastaFiles.length === 0) {
+      toast({
+        title: "No files selected",
+        description: "Please upload at least one FASTA file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSequenceSearchLoading(true);
+    // Reset previous job data
+    setSequenceJobId(null);
+    setSequenceJobStatus(null);
+    setSequenceJobProgress(0);
+    setSequenceJobResults(null);
+
+    try {
+      // Create a FormData object to send the files
+      const formData = new FormData();
+
+      // Convert the file content back to Blob objects and append to FormData
+      for (const file of fastaFiles) {
+        const blob = new Blob([file.content], { type: 'text/plain' });
+        formData.append('files', blob, file.name);
+      }
+
+      // Send the files to the server
+      const response = await fetch('/api/search/sequence', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to upload files');
+      }
+
+      const data = await response.json();
+
+      toast({
+        title: "Files uploaded successfully",
+        description: `Job queued with ID: ${data.jobId}`,
+      });
+
+      // Store the job ID and start polling for status
+      setSequenceJobId(data.jobId);
+      pollSequenceJobStatus(data.jobId);
+
+    } catch (error) {
+      console.error('Error during sequence search:', error);
+      toast({
+        title: "Error",
+        description: "Failed to upload files. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSequenceSearchLoading(false);
+    }
+  };
+
+  // State for BGC job tracking
+  const [bgcJobId, setBgcJobId] = useState<string | null>(null);
+  const [bgcJobStatus, setBgcJobStatus] = useState<string | null>(null);
+  const [bgcJobProgress, setBgcJobProgress] = useState<number>(0);
+  const [bgcJobResults, setBgcJobResults] = useState<any>(null);
+  const [isPollingBgcJob, setIsPollingBgcJob] = useState<boolean>(false);
+
+  // Function to poll BGC job status
+  const pollBgcJobStatus = async (jobId: string) => {
+    if (!jobId) return;
+
+    setIsPollingBgcJob(true);
+
+    try {
+      const response = await fetch(`/api/search/status/${jobId}?type=bgc`);
+
+      if (!response.ok) {
+        throw new Error('Failed to get job status');
+      }
+
+      const data = await response.json();
+
+      setBgcJobStatus(data.state);
+      setBgcJobProgress(data.progress || 0);
+
+      if (data.state === 'completed' && data.result) {
+        setBgcJobResults(data.result);
+        setIsPollingBgcJob(false);
+
+        toast({
+          title: "Search completed",
+          description: "Your BGC search has completed successfully.",
+        });
+      } else if (data.state === 'failed') {
+        setIsPollingBgcJob(false);
+
+        toast({
+          title: "Search failed",
+          description: "Your BGC search has failed. Please try again.",
+          variant: "destructive",
+        });
+      } else {
+        // Continue polling if job is still in progress
+        setTimeout(() => pollBgcJobStatus(jobId), 2000);
+      }
+    } catch (error) {
+      console.error('Error polling job status:', error);
+      setIsPollingBgcJob(false);
+
+      toast({
+        title: "Error",
+        description: "Failed to get job status. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Function to handle BGC search
+  const handleBgcSearch = async () => {
+    if (gbkFiles.length === 0) {
+      toast({
+        title: "No files selected",
+        description: "Please upload at least one GenBank file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsBgcSearchLoading(true);
+    // Reset previous job data
+    setBgcJobId(null);
+    setBgcJobStatus(null);
+    setBgcJobProgress(0);
+    setBgcJobResults(null);
+
+    try {
+      // Create a FormData object to send the files
+      const formData = new FormData();
+
+      // Convert the file content back to Blob objects and append to FormData
+      for (const file of gbkFiles) {
+        const blob = new Blob([file.content], { type: 'text/plain' });
+        formData.append('files', blob, file.name);
+      }
+
+      // Send the files to the server
+      const response = await fetch('/api/search/bgc', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to upload files');
+      }
+
+      const data = await response.json();
+
+      toast({
+        title: "Files uploaded successfully",
+        description: `Job queued with ID: ${data.jobId}`,
+      });
+
+      // Store the job ID and start polling for status
+      setBgcJobId(data.jobId);
+      pollBgcJobStatus(data.jobId);
+
+    } catch (error) {
+      console.error('Error during BGC search:', error);
+      toast({
+        title: "Error",
+        description: "Failed to upload files. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBgcSearchLoading(false);
+    }
   };
 
   return (
@@ -218,7 +457,12 @@ export function SearchClient() {
                 </div>
               </div>
 
-              <Button>Search with Sequence</Button>
+              <Button 
+                onClick={handleSequenceSearch} 
+                disabled={isSequenceSearchLoading}
+              >
+                {isSequenceSearchLoading ? "Uploading..." : "Search with Sequence"}
+              </Button>
             </div>
           </TabsContent>
           <TabsContent value="bgc" className="mt-6">
@@ -288,7 +532,12 @@ export function SearchClient() {
                 </div>
               )}
 
-              <Button>Search with BGC</Button>
+              <Button 
+                onClick={handleBgcSearch} 
+                disabled={isBgcSearchLoading}
+              >
+                {isBgcSearchLoading ? "Uploading..." : "Search with BGC"}
+              </Button>
             </div>
           </TabsContent>
         </Tabs>
@@ -297,6 +546,76 @@ export function SearchClient() {
 
         <div>
           <h2 className="font-headline text-2xl font-bold">Results</h2>
+
+          {/* Job Status Display */}
+          {(sequenceJobId || bgcJobId) && (
+            <div className="mt-4 mb-6">
+              <h3 className="font-semibold mb-2">Job Status</h3>
+
+              {sequenceJobId && (
+                <div className="bg-muted p-4 rounded-md mb-2">
+                  <div className="flex justify-between items-center mb-2">
+                    <div>
+                      <span className="font-medium">Sequence Search Job:</span> {sequenceJobId}
+                    </div>
+                    <div className="text-sm">
+                      Status: <span className={`font-semibold ${
+                        sequenceJobStatus === 'completed' ? 'text-green-600' : 
+                        sequenceJobStatus === 'failed' ? 'text-red-600' : 
+                        'text-amber-600'
+                      }`}>
+                        {sequenceJobStatus || 'Pending'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div 
+                      className="bg-primary h-2.5 rounded-full" 
+                      style={{ width: `${sequenceJobProgress}%` }}
+                    ></div>
+                  </div>
+
+                  {isPollingSequenceJob && (
+                    <p className="text-xs text-muted-foreground mt-1">Waiting for results...</p>
+                  )}
+                </div>
+              )}
+
+              {bgcJobId && (
+                <div className="bg-muted p-4 rounded-md">
+                  <div className="flex justify-between items-center mb-2">
+                    <div>
+                      <span className="font-medium">BGC Search Job:</span> {bgcJobId}
+                    </div>
+                    <div className="text-sm">
+                      Status: <span className={`font-semibold ${
+                        bgcJobStatus === 'completed' ? 'text-green-600' : 
+                        bgcJobStatus === 'failed' ? 'text-red-600' : 
+                        'text-amber-600'
+                      }`}>
+                        {bgcJobStatus || 'Pending'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div 
+                      className="bg-primary h-2.5 rounded-full" 
+                      style={{ width: `${bgcJobProgress}%` }}
+                    ></div>
+                  </div>
+
+                  {isPollingBgcJob && (
+                    <p className="text-xs text-muted-foreground mt-1">Waiting for results...</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <Tabs defaultValue="bgcs-results" className="mt-4">
             <TabsList>
               <TabsTrigger value="bgcs-results">BGCs</TabsTrigger>
@@ -304,25 +623,73 @@ export function SearchClient() {
               <TabsTrigger value="samples-results">Samples</TabsTrigger>
               <TabsTrigger value="taxa-results">Taxa</TabsTrigger>
             </TabsList>
+
             <TabsContent value="bgcs-results" className="mt-4">
-                <div className="flex flex-col items-center justify-center h-48 border-2 border-dashed rounded-lg">
-                    <p className="text-muted-foreground">Search results will appear here.</p>
+              {(sequenceJobResults || bgcJobResults) ? (
+                <div className="border rounded-md p-4">
+                  {sequenceJobResults && sequenceJobResults.results && (
+                    <div className="mb-4">
+                      <h4 className="font-semibold mb-2">Sequence Search Results</h4>
+                      {sequenceJobResults.results.matches && sequenceJobResults.results.matches.length > 0 ? (
+                        <div className="space-y-2">
+                          {sequenceJobResults.results.matches.map((match, index) => (
+                            <div key={index} className="bg-muted p-3 rounded-md">
+                              <div className="flex justify-between">
+                                <span className="font-medium">{match.id}</span>
+                                <span>Similarity: {(match.similarity * 100).toFixed(1)}%</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p>No matches found.</p>
+                      )}
+                    </div>
+                  )}
+
+                  {bgcJobResults && bgcJobResults.results && (
+                    <div>
+                      <h4 className="font-semibold mb-2">BGC Search Results</h4>
+                      {bgcJobResults.results.matches && bgcJobResults.results.matches.length > 0 ? (
+                        <div className="space-y-2">
+                          {bgcJobResults.results.matches.map((match, index) => (
+                            <div key={index} className="bg-muted p-3 rounded-md">
+                              <div className="flex justify-between">
+                                <span className="font-medium">{match.id}</span>
+                                <span>Similarity: {(match.similarity * 100).toFixed(1)}%</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p>No matches found.</p>
+                      )}
+                    </div>
+                  )}
                 </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-48 border-2 border-dashed rounded-lg">
+                  <p className="text-muted-foreground">Search results will appear here.</p>
+                </div>
+              )}
             </TabsContent>
-             <TabsContent value="gcfs-results" className="mt-4">
-                <div className="flex flex-col items-center justify-center h-48 border-2 border-dashed rounded-lg">
-                    <p className="text-muted-foreground">Search results will appear here.</p>
-                </div>
+
+            <TabsContent value="gcfs-results" className="mt-4">
+              <div className="flex flex-col items-center justify-center h-48 border-2 border-dashed rounded-lg">
+                <p className="text-muted-foreground">Search results will appear here.</p>
+              </div>
             </TabsContent>
-             <TabsContent value="samples-results" className="mt-4">
-                <div className="flex flex-col items-center justify-center h-48 border-2 border-dashed rounded-lg">
-                    <p className="text-muted-foreground">Search results will appear here.</p>
-                </div>
+
+            <TabsContent value="samples-results" className="mt-4">
+              <div className="flex flex-col items-center justify-center h-48 border-2 border-dashed rounded-lg">
+                <p className="text-muted-foreground">Search results will appear here.</p>
+              </div>
             </TabsContent>
-             <TabsContent value="taxa-results" className="mt-4">
-                <div className="flex flex-col items-center justify-center h-48 border-2 border-dashed rounded-lg">
-                    <p className="text-muted-foreground">Search results will appear here.</p>
-                </div>
+
+            <TabsContent value="taxa-results" className="mt-4">
+              <div className="flex flex-col items-center justify-center h-48 border-2 border-dashed rounded-lg">
+                <p className="text-muted-foreground">Search results will appear here.</p>
+              </div>
             </TabsContent>
           </Tabs>
         </div>

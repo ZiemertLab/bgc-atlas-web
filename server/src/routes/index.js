@@ -1,6 +1,38 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
+
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, '..', '..', process.env.UPLOADS_DIR || 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Configure multer storage
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    // Create a new directory with UUID for each upload session
+    const sessionId = uuidv4();
+    const sessionDir = path.join(uploadsDir, sessionId);
+    fs.mkdirSync(sessionDir, { recursive: true });
+
+    // Store the session directory path in the request for later use
+    req.sessionDir = sessionDir;
+    req.sessionId = sessionId;
+
+    cb(null, sessionDir);
+  },
+  filename: function (req, file, cb) {
+    // Keep the original filename
+    cb(null, file.originalname);
+  }
+});
+
+const upload = multer({ storage: storage });
 
 // Stats endpoints
 router.get('/stats/kpi', async (req, res) => {
@@ -815,6 +847,185 @@ router.get('/browse/analyses', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching analyses:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Import the queues
+const { sequenceSearchQueue, bgcSearchQueue } = require('../queue');
+
+// Sequence Search endpoint
+router.post('/search/sequence', upload.array('files'), async (req, res) => {
+  try {
+    // Files are uploaded to req.sessionDir with UUID req.sessionId
+    const jobData = {
+      sessionId: req.sessionId,
+      uploadPath: req.sessionDir,
+      files: req.files.map(file => ({
+        filename: file.filename,
+        path: file.path
+      }))
+    };
+
+    // Add job to the sequence search queue
+    const job = await sequenceSearchQueue.add(jobData, {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 1000
+      }
+    });
+
+    // Return the job ID and session ID to the client
+    res.json({
+      success: true,
+      message: 'Files uploaded and search job queued successfully',
+      sessionId: req.sessionId,
+      jobId: job.id,
+      uploadPath: req.sessionDir,
+      files: req.files.map(file => ({
+        filename: file.filename,
+        path: file.path
+      }))
+    });
+  } catch (error) {
+    console.error('Error uploading sequence files:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// BGC Search endpoint
+router.post('/search/bgc', upload.array('files'), async (req, res) => {
+  try {
+    // Files are uploaded to req.sessionDir with UUID req.sessionId
+    const jobData = {
+      sessionId: req.sessionId,
+      uploadPath: req.sessionDir,
+      files: req.files.map(file => ({
+        filename: file.filename,
+        path: file.path
+      }))
+    };
+
+    // Add job to the BGC search queue
+    const job = await bgcSearchQueue.add(jobData, {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 1000
+      }
+    });
+
+    // Return the job ID and session ID to the client
+    res.json({
+      success: true,
+      message: 'Files uploaded and search job queued successfully',
+      sessionId: req.sessionId,
+      jobId: job.id,
+      uploadPath: req.sessionDir,
+      files: req.files.map(file => ({
+        filename: file.filename,
+        path: file.path
+      }))
+    });
+  } catch (error) {
+    console.error('Error uploading BGC files:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get job status endpoint
+router.get('/search/status/:jobId', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const { type } = req.query;
+
+    // Determine which queue to use based on the type parameter
+    let queue;
+    if (type === 'sequence') {
+      queue = sequenceSearchQueue;
+    } else if (type === 'bgc') {
+      queue = bgcSearchQueue;
+    } else {
+      return res.status(400).json({ error: 'Invalid search type. Must be "sequence" or "bgc".' });
+    }
+
+    // Get job from queue
+    const job = await queue.getJob(jobId);
+
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    // Get job state and progress
+    const state = await job.getState();
+    const progress = job._progress;
+
+    // Get job result if completed
+    let result = null;
+    if (state === 'completed') {
+      result = await job.finished();
+    }
+
+    res.json({
+      jobId,
+      state,
+      progress,
+      result
+    });
+  } catch (error) {
+    console.error('Error getting job status:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get all jobs for a session
+router.get('/search/session/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { type } = req.query;
+
+    // Determine which queue to use based on the type parameter
+    let queue;
+    if (type === 'sequence') {
+      queue = sequenceSearchQueue;
+    } else if (type === 'bgc') {
+      queue = bgcSearchQueue;
+    } else {
+      return res.status(400).json({ error: 'Invalid search type. Must be "sequence" or "bgc".' });
+    }
+
+    // Get all jobs from queue
+    const jobs = await queue.getJobs(['waiting', 'active', 'completed', 'failed']);
+
+    // Filter jobs by sessionId
+    const sessionJobs = jobs.filter(job => job.data.sessionId === sessionId);
+
+    // Get state and progress for each job
+    const jobsWithStatus = await Promise.all(sessionJobs.map(async (job) => {
+      const state = await job.getState();
+      const progress = job._progress;
+
+      // Get job result if completed
+      let result = null;
+      if (state === 'completed') {
+        result = await job.finished();
+      }
+
+      return {
+        jobId: job.id,
+        state,
+        progress,
+        result
+      };
+    }));
+
+    res.json({
+      sessionId,
+      jobs: jobsWithStatus
+    });
+  } catch (error) {
+    console.error('Error getting session jobs:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

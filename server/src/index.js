@@ -4,6 +4,9 @@ const morgan = require('morgan');
 const path = require('path');
 require('dotenv').config();
 
+// Import the queue system
+require('./queue');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -23,4 +26,5 @@ app.get('/health', (req, res) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`Redis queue system initialized`);
 });

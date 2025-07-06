@@ -212,3 +212,125 @@ CREATE INDEX idx_bgcs_anchor          ON bgcs(anchor);
 CREATE INDEX idx_bgcs_product_class   ON bgcs USING GIN (product_class);
 CREATE INDEX idx_bgcs_product_type    ON bgcs USING GIN (product_type);
 CREATE INDEX idx_bgcs_filename ON bgcs(filename);
+
+
+
+CREATE VIEW bgcs_per_assembly AS
+SELECT
+    a.id AS assembly_id,
+    a.accession AS assembly_accession,
+    COUNT(b.id) AS bgc_count
+FROM
+    assemblies a
+        LEFT JOIN
+    bgcs b ON a.id = b.assembly
+GROUP BY
+    a.id, a.accession;
+
+
+CREATE VIEW bgcs_per_analysis AS
+SELECT
+    an.id AS analysis_id,
+    an.accession AS analysis_accession,
+    COUNT(b.id) AS bgc_count
+FROM
+    analyses an
+        JOIN
+    assembly_analyses aa ON an.id = aa.analysis_id
+        JOIN
+    assemblies a ON aa.assembly_id = a.id
+        LEFT JOIN
+    bgcs b ON a.id = b.assembly
+GROUP BY
+    an.id, an.accession;
+
+
+CREATE VIEW bgcs_per_run AS
+SELECT
+    r.id AS run_id,
+    r.accession AS run_accession,
+    COUNT(b.id) AS bgc_count
+FROM
+    runs r
+        JOIN
+    run_assemblies ra ON r.id = ra.run_id
+        JOIN
+    assemblies a ON ra.assembly_id = a.id
+        LEFT JOIN
+    bgcs b ON a.id = b.assembly
+GROUP BY
+    r.id, r.accession;
+
+
+
+CREATE VIEW bgcs_per_sample AS
+SELECT
+    s.id AS sample_id,
+    s.accession AS sample_accession,
+    COUNT(DISTINCT b.id) AS bgc_count
+FROM
+    samples s
+        JOIN
+    sample_runs sr ON s.id = sr.sample_id
+        JOIN
+    runs r ON sr.run_id = r.id
+        JOIN
+    run_assemblies ra ON r.id = ra.run_id
+        JOIN
+    assemblies a ON ra.assembly_id = a.id
+        LEFT JOIN
+    bgcs b ON a.id = b.assembly
+GROUP BY
+    s.id, s.accession;
+
+
+
+CREATE VIEW bgcs_per_study AS
+SELECT
+    st.id AS study_id,
+    st.accession AS study_accession,
+    COUNT(DISTINCT b.id) AS bgc_count
+FROM
+    studies st
+        JOIN
+    study_samples ss ON st.id = ss.study_id
+        JOIN
+    samples s ON ss.sample_id = s.id
+        JOIN
+    sample_runs sr ON s.id = sr.sample_id
+        JOIN
+    runs r ON sr.run_id = r.id
+        JOIN
+    run_assemblies ra ON r.id = ra.run_id
+        JOIN
+    assemblies a ON ra.assembly_id = a.id
+        LEFT JOIN
+    bgcs b ON a.id = b.assembly
+GROUP BY
+    st.id, st.accession;
+
+
+
+CREATE VIEW bgcs_per_biome AS
+SELECT
+    b.id AS biome_id,
+    b.lineage AS biome_lineage,
+    COUNT(DISTINCT bgc.id) AS bgc_count
+FROM
+    biomes b
+        JOIN
+    sample_biomes sb ON b.id = sb.biome_id
+        JOIN
+    samples s ON sb.sample_id = s.id
+        JOIN
+    sample_runs sr ON s.id = sr.sample_id
+        JOIN
+    runs r ON sr.run_id = r.id
+        JOIN
+    run_assemblies ra ON r.id = ra.run_id
+        JOIN
+    assemblies a ON ra.assembly_id = a.id
+        LEFT JOIN
+    bgcs bgc ON a.id = bgc.assembly
+GROUP BY
+    b.id, b.lineage;
