@@ -1002,6 +1002,104 @@ router.get('/search/status/:jobId', async (req, res) => {
   }
 });
 
+// Get sample locations for map
+router.get('/map/sample-locations', async (req, res) => {
+  try {
+    const { bounds, zoom, limit = 1000, offset = 0, all = false } = req.query;
+
+    // Create a cache key based on the request parameters
+    const Redis = require('ioredis');
+    const redis = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD || undefined,
+    });
+
+    // Special cache key for "all" requests
+    const cacheKey = all === 'true' 
+      ? 'sample-locations:all-samples' 
+      : `sample-locations:${bounds || 'all'}:${zoom || 'all'}:${limit}:${offset}`;
+
+    // Try to get data from cache first
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+      console.log('Returning sample locations from cache');
+      redis.quit();
+      return res.json(JSON.parse(cachedData));
+    }
+
+    // If not in cache, query the database
+    let query = `
+      SELECT id, accession, sample_name, latitude, longitude
+      FROM samples
+      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+    `;
+
+    const queryParams = [];
+    let paramIndex = 1;
+
+    // Add bounding box filter if provided and not requesting all samples
+    if (bounds && all !== 'true') {
+      const [south, west, north, east] = bounds.split(',').map(Number);
+      query += ` AND latitude BETWEEN $${paramIndex} AND $${paramIndex+1} 
+                 AND longitude BETWEEN $${paramIndex+2} AND $${paramIndex+3}`;
+      queryParams.push(south, north, west, east);
+      paramIndex += 4;
+    }
+
+    // If zoom level is low and not requesting all samples, use clustering to reduce points
+    if (zoom && parseInt(zoom) < 5 && all !== 'true') {
+      // For low zoom levels, cluster points by rounding coordinates
+      // The lower the zoom, the more aggressive the clustering
+      const precision = Math.max(1, parseInt(zoom));
+      query = `
+        SELECT 
+          MIN(id) as id,
+          MIN(accession) as accession,
+          COUNT(*) as sample_count,
+          ROUND(AVG(latitude)::numeric, ${precision}) as latitude,
+          ROUND(AVG(longitude)::numeric, ${precision}) as longitude
+        FROM (${query}) as samples
+        GROUP BY ROUND(latitude::numeric, ${precision}), ROUND(longitude::numeric, ${precision})
+      `;
+    }
+
+    // Get total count for pagination or total count
+    const countResult = await db.query(`
+      SELECT COUNT(*) FROM samples 
+      WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+    `);
+
+    const totalSamples = parseInt(countResult.rows[0].count);
+
+    // Add pagination only if not requesting all samples
+    if (all !== 'true') {
+      query += ` LIMIT $${paramIndex} OFFSET $${paramIndex+1}`;
+      queryParams.push(parseInt(limit), parseInt(offset));
+    }
+
+    const result = await db.query(query, queryParams);
+
+    const responseData = {
+      data: result.rows,
+      total: totalSamples,
+      limit: all === 'true' ? totalSamples : parseInt(limit),
+      offset: all === 'true' ? 0 : parseInt(offset)
+    };
+
+    // Cache the result for 1 hour (3600 seconds)
+    // For "all" requests, cache for longer (24 hours) since they're less likely to change
+    const cacheTime = all === 'true' ? 86400 : 3600;
+    await redis.set(cacheKey, JSON.stringify(responseData), 'EX', cacheTime);
+    redis.quit();
+
+    res.json(responseData);
+  } catch (error) {
+    console.error('Error fetching sample locations:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get queue statistics endpoint
 router.get('/search/queue-stats', async (req, res) => {
   try {
