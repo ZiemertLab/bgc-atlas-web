@@ -757,7 +757,7 @@ router.get('/browse/analyses', async (req, res) => {
     const filters = req.query.filters ? JSON.parse(req.query.filters) : {};
 
     // Validate sort parameters to prevent SQL injection
-    const validColumns = ['id', 'accession', 'experiment_type', 'pipeline_version', 'analysis_status', 'submit_time', 'complete_time', 'instrument_platform', 'instrument_model'];
+    const validColumns = ['id', 'accession', 'bgc_count', 'experiment_type', 'pipeline_version', 'analysis_status', 'submit_time', 'complete_time', 'instrument_platform', 'instrument_model'];
     const validDirections = ['asc', 'desc'];
 
     const column = validColumns.includes(sortColumn) ? sortColumn : 'id';
@@ -814,6 +814,12 @@ router.get('/browse/analyses', async (req, res) => {
         paramIndex++;
       }
 
+      if (filters.bgc_count !== undefined) {
+        conditions.push(`COALESCE(bpa.bgc_count, 0) = $${paramIndex}`);
+        queryParams.push(parseInt(filters.bgc_count));
+        paramIndex++;
+      }
+
       whereClause += conditions.join(' AND ');
 
       // If no conditions were added, remove the WHERE clause
@@ -822,17 +828,22 @@ router.get('/browse/analyses', async (req, res) => {
       }
     }
 
-    // Get analyses with pagination
+    // Get analyses with pagination and BGC count
     const analysesResult = await db.query(`
-      SELECT a.*
+      SELECT a.*, COALESCE(bpa.bgc_count, 0) as bgc_count
       FROM analyses a
+      LEFT JOIN bgcs_per_analysis bpa ON a.id = bpa.analysis_id
       ${whereClause}
-      ORDER BY a.${column} ${direction}
+      ORDER BY ${column === 'bgc_count' ? 'COALESCE(bpa.bgc_count, 0)' : `a.${column}`} ${direction}
       LIMIT $1 OFFSET $2
     `, queryParams);
 
     // Get total count with filters
-    let countQuery = 'SELECT COUNT(*) FROM analyses a';
+    let countQuery = `
+      SELECT COUNT(*) 
+      FROM analyses a
+      LEFT JOIN bgcs_per_analysis bpa ON a.id = bpa.analysis_id
+    `;
     if (whereClause) {
       countQuery += ' ' + whereClause;
     }

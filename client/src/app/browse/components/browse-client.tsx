@@ -55,7 +55,7 @@ export function BrowseClient() {
   const [taxonomySort, setTaxonomySort] = useState<SortState>({ column: "", direction: null });
   const [bgcsSort, setBgcsSort] = useState<SortState>({ column: "", direction: null });
   const [assembliesSort, setAssembliesSort] = useState<SortState>({ column: "", direction: null });
-  const [analysesSort, setAnalysesSort] = useState<SortState>({ column: "", direction: null });
+  const [analysesSort, setAnalysesSort] = useState<SortState>({ column: "bgc_count", direction: "desc" });
 
   // Filtering states for each table
   const [studiesFilter, setStudiesFilter] = useState<FilterState>({});
@@ -507,59 +507,12 @@ export function BrowseClient() {
               filter: { type: 'text' }
             },
             {
-              key: "accession",
-              label: "Accession",
+              key: "bgc_count",
+              label: "BGC Count",
               sortable: true,
               filterable: true,
-              filter: { type: 'text' }
-            },
-            {
-              key: "experiment_type",
-              label: "Experiment Type",
-              sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
-              render: (row) => row.experiment_type || 'N/A'
-            },
-            {
-              key: "pipeline_version",
-              label: "Pipeline Version",
-              sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
-              render: (row) => row.pipeline_version || 'N/A'
-            },
-            {
-              key: "analysis_status",
-              label: "Status",
-              sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
-              render: (row) => row.analysis_status || 'N/A'
-            },
-            {
-              key: "submit_time",
-              label: "Submit Time",
-              sortable: true,
-              filterable: true,
-              filter: { type: 'date' },
-              render: (row) => row.submit_time ? new Date(row.submit_time).toLocaleString() : 'N/A'
-            },
-            {
-              key: "complete_time",
-              label: "Complete Time",
-              sortable: true,
-              filterable: true,
-              filter: { type: 'date' },
-              render: (row) => row.complete_time ? new Date(row.complete_time).toLocaleString() : 'N/A'
-            },
-            {
-              key: "instrument_platform",
-              label: "Instrument Platform",
-              sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
-              render: (row) => row.instrument_platform || 'N/A'
+              filter: { type: 'number' },
+              render: (row) => row.bgc_count !== undefined ? row.bgc_count : 'N/A'
             },
             {
               key: "instrument_model",

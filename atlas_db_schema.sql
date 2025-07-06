@@ -334,3 +334,62 @@ FROM
     bgcs bgc ON a.id = bgc.assembly
 GROUP BY
     b.id, b.lineage;
+
+
+CREATE MATERIALIZED VIEW unified_analyses_view AS
+SELECT
+    -- Analysis information
+    an.id AS analysis_id,
+    an.accession AS analysis_accession,
+    an.instrument_platform,
+    bpa.bgc_count,
+
+    -- Sample information
+    s.id AS sample_id,
+    s.accession AS sample_accession,
+    s.biosample,
+    s.sample_name,
+    s.latitude,
+    s.longitude,
+    s.geo_loc_name,
+    s.environment_biome,
+    s.environment_feature,
+    s.environment_material,
+    s.host_tax_id,
+    s.species,
+
+    -- Study information
+    st.id AS study_id,
+    st.accession AS study_accession,
+    st.bioproject,
+    st.study_name,
+
+    -- Biome information
+    b.id AS biome_id,
+    b.lineage AS biome_lineage,
+
+    -- Publications information
+    STRING_AGG(DISTINCT p.doi, ', ') AS publications,
+    STRING_AGG(DISTINCT CONCAT(p.title, ' (', p.doi, ')'), '; ') AS study_publications
+FROM
+    analyses an
+        JOIN bgcs_per_analysis bpa ON an.id = bpa.analysis_id
+        JOIN assembly_analyses aa ON an.id = aa.analysis_id
+        JOIN assemblies a ON aa.assembly_id = a.id
+        JOIN run_assemblies ra ON a.id = ra.assembly_id
+        JOIN runs r ON ra.run_id = r.id
+        JOIN sample_runs sr ON r.id = sr.run_id
+        JOIN samples s ON sr.sample_id = s.id
+        JOIN study_samples ss ON s.id = ss.sample_id
+        JOIN studies st ON ss.study_id = st.id
+        LEFT JOIN sample_biomes sb ON s.id = sb.sample_id
+        LEFT JOIN biomes b ON sb.biome_id = b.id
+        LEFT JOIN study_publications sp ON st.id = sp.study_id
+        LEFT JOIN publications p ON sp.publication_id = p.id
+GROUP BY
+    an.id, an.accession, an.instrument_platform, bpa.bgc_count,
+    s.id, s.accession, s.biosample, s.sample_name, s.latitude, s.longitude,
+    s.geo_loc_name, s.environment_biome, s.environment_feature, s.environment_material,
+    s.host_tax_id, s.species,
+    st.id, st.accession, st.bioproject, st.study_name,
+    b.id, b.lineage;
