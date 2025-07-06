@@ -14,22 +14,11 @@ export async function GET(
     const urlParts = url.split('/');
     const jobId = urlParts[urlParts.length - 1].split('?')[0];
 
-    // Get the search type from the query parameters
-    const searchParams = request.nextUrl.searchParams;
-    const type = searchParams.get('type');
-
-    if (!type) {
-      return NextResponse.json(
-        { error: 'Search type is required' },
-        { status: 400 }
-      );
-    }
-
     // Forward the request to the Express server
     const expressServerUrl = process.env.EXPRESS_SERVER_URL || 'http://localhost:3000';
 
-    // Create the URL with the job ID and search type
-    const apiUrl = `${expressServerUrl}/api/search/status/${jobId}?type=${type}`;
+    // Create the URL with just the job ID
+    const apiUrl = `${expressServerUrl}/api/search/status/${jobId}`;
 
     // Forward the request and get the response
     const response = await fetch(apiUrl);

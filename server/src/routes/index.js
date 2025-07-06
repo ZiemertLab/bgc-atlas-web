@@ -948,12 +948,6 @@ router.post('/search/bgc', upload.array('files'), async (req, res) => {
 router.get('/search/status/:jobId', async (req, res) => {
   try {
     const { jobId } = req.params;
-    const { type } = req.query;
-
-    // Validate the search type
-    if (type !== 'sequence' && type !== 'bgc') {
-      return res.status(400).json({ error: 'Invalid search type. Must be "sequence" or "bgc".' });
-    }
 
     // Get job from the single queue
     const job = await searchQueue.getJob(jobId);
@@ -962,10 +956,8 @@ router.get('/search/status/:jobId', async (req, res) => {
       return res.status(404).json({ error: 'Job not found' });
     }
 
-    // Verify that the job type matches the requested type
-    if (job.data.type !== type) {
-      return res.status(400).json({ error: `Job ${jobId} is not a ${type} search job` });
-    }
+    // Get the job type from the job data
+    const type = job.data.type;
 
     // Get job state and progress
     const state = await job.getState();
@@ -993,6 +985,7 @@ router.get('/search/status/:jobId', async (req, res) => {
 
     res.json({
       jobId,
+      type,
       state,
       progress,
       result,

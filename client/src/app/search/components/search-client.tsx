@@ -19,6 +19,18 @@ type UploadedFile = {
   content: string;
 };
 
+// Define a type for job history
+type JobHistoryItem = {
+  jobId: string;
+  type: "sequence" | "bgc";
+  timestamp: number;
+};
+
+// Cookie constants
+const JOB_HISTORY_COOKIE_NAME = "job_history";
+const JOB_HISTORY_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+const JOB_HISTORY_MAX_ITEMS = 10;
+
 export function SearchClient() {
   // Sequence search state
   const [fastaFiles, setFastaFiles] = useState<UploadedFile[]>([]);
@@ -26,6 +38,9 @@ export function SearchClient() {
   const [searchCompleteSetOnly, setSearchCompleteSetOnly] = useState(false);
   const [isSequenceSearchLoading, setIsSequenceSearchLoading] = useState(false);
   const fastaFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Job history state
+  const [jobHistory, setJobHistory] = useState<JobHistoryItem[]>([]);
 
   // BGC search state
   const [gbkFiles, setGbkFiles] = useState<UploadedFile[]>([]);
@@ -104,7 +119,7 @@ export function SearchClient() {
     setIsPollingSequenceJob(true);
 
     try {
-      const response = await fetch(`/api/search/status/${jobId}?type=sequence`);
+      const response = await fetch(`/api/search/status/${jobId}`);
 
       if (!response.ok) {
         throw new Error('Failed to get job status');
@@ -208,6 +223,9 @@ export function SearchClient() {
       setSequenceJobId(data.jobId);
       pollSequenceJobStatus(data.jobId);
 
+      // Add job to history
+      addJobToHistory(data.jobId, "sequence");
+
     } catch (error) {
       console.error('Error during sequence search:', error);
       toast({
@@ -243,12 +261,13 @@ export function SearchClient() {
 
   // State for job UUID search
   const [jobUuid, setJobUuid] = useState<string>("");
-  const [jobUuidType, setJobUuidType] = useState<string>("sequence");
   const [isLoadingJobUuid, setIsLoadingJobUuid] = useState<boolean>(false);
 
   // Function to handle job retrieval by UUID
-  const handleJobUuidSearch = async () => {
-    if (!jobUuid.trim()) {
+  const handleJobUuidSearch = async (providedUuid?: string) => {
+    const uuidToUse = providedUuid || jobUuid;
+
+    if (!uuidToUse.trim()) {
       toast({
         title: "No UUID provided",
         description: "Please enter a job UUID to search.",
@@ -260,17 +279,18 @@ export function SearchClient() {
     setIsLoadingJobUuid(true);
 
     try {
-      const response = await fetch(`/api/search/status/${jobUuid}?type=${jobUuidType}`);
+      const response = await fetch(`/api/search/status/${uuidToUse}`);
 
       if (!response.ok) {
         throw new Error('Failed to retrieve job');
       }
 
       const data = await response.json();
+      const type = data.type; // Get the job type from the API response
 
       // Set the appropriate job state based on the job type
-      if (jobUuidType === 'sequence') {
-        setSequenceJobId(jobUuid);
+      if (type === 'sequence') {
+        setSequenceJobId(uuidToUse);
         setSequenceJobStatus(data.state);
         setSequenceJobProgress(data.progress || 0);
         if (data.result) {
@@ -282,10 +302,13 @@ export function SearchClient() {
 
         // If job is still in progress, start polling
         if (data.state !== 'completed' && data.state !== 'failed') {
-          pollSequenceJobStatus(jobUuid);
+          pollSequenceJobStatus(uuidToUse);
         }
-      } else if (jobUuidType === 'bgc') {
-        setBgcJobId(jobUuid);
+
+        // Add job to history
+        addJobToHistory(uuidToUse, "sequence");
+      } else if (type === 'bgc') {
+        setBgcJobId(uuidToUse);
         setBgcJobStatus(data.state);
         setBgcJobProgress(data.progress || 0);
         if (data.result) {
@@ -297,13 +320,21 @@ export function SearchClient() {
 
         // If job is still in progress, start polling
         if (data.state !== 'completed' && data.state !== 'failed') {
-          pollBgcJobStatus(jobUuid);
+          pollBgcJobStatus(uuidToUse);
         }
+
+        // Add job to history
+        addJobToHistory(uuidToUse, "bgc");
+      }
+
+      // Update the input field with the UUID we just used
+      if (providedUuid) {
+        setJobUuid(providedUuid);
       }
 
       toast({
         title: "Job retrieved",
-        description: `Job ${jobUuid} retrieved successfully.`,
+        description: `Job ${uuidToUse} retrieved successfully.`,
       });
     } catch (error) {
       console.error('Error retrieving job:', error);
@@ -347,6 +378,56 @@ export function SearchClient() {
     }
   };
 
+  // Helper functions for job history cookie management
+  const getJobHistoryFromCookie = (): JobHistoryItem[] => {
+    if (typeof document === 'undefined') return []; // Server-side rendering check
+
+    const cookies = document.cookie.split(';');
+    const jobHistoryCookie = cookies.find(cookie => cookie.trim().startsWith(`${JOB_HISTORY_COOKIE_NAME}=`));
+
+    if (!jobHistoryCookie) return [];
+
+    try {
+      const jobHistoryValue = jobHistoryCookie.split('=')[1];
+      return JSON.parse(decodeURIComponent(jobHistoryValue));
+    } catch (error) {
+      console.error('Error parsing job history cookie:', error);
+      return [];
+    }
+  };
+
+  const saveJobHistoryToCookie = (history: JobHistoryItem[]) => {
+    if (typeof document === 'undefined') return; // Server-side rendering check
+
+    // Limit the number of items in history
+    const limitedHistory = history.slice(0, JOB_HISTORY_MAX_ITEMS);
+
+    // Save to cookie
+    const jobHistoryValue = encodeURIComponent(JSON.stringify(limitedHistory));
+    document.cookie = `${JOB_HISTORY_COOKIE_NAME}=${jobHistoryValue}; path=/; max-age=${JOB_HISTORY_COOKIE_MAX_AGE}`;
+  };
+
+  const addJobToHistory = (jobId: string, type: "sequence" | "bgc") => {
+    const newJob: JobHistoryItem = {
+      jobId,
+      type,
+      timestamp: Date.now()
+    };
+
+    // Add to state
+    const updatedHistory = [newJob, ...jobHistory.filter(job => job.jobId !== jobId)];
+    setJobHistory(updatedHistory);
+
+    // Save to cookie
+    saveJobHistoryToCookie(updatedHistory);
+  };
+
+  // Load job history from cookie when component mounts
+  useEffect(() => {
+    const history = getJobHistoryFromCookie();
+    setJobHistory(history);
+  }, []);
+
   // Fetch queue statistics when the component mounts and periodically
   useEffect(() => {
     // Fetch queue statistics immediately
@@ -366,7 +447,7 @@ export function SearchClient() {
     setIsPollingBgcJob(true);
 
     try {
-      const response = await fetch(`/api/search/status/${jobId}?type=bgc`);
+      const response = await fetch(`/api/search/status/${jobId}`);
 
       if (!response.ok) {
         throw new Error('Failed to get job status');
@@ -463,6 +544,9 @@ export function SearchClient() {
       // Store the job ID and start polling for status
       setBgcJobId(data.jobId);
       pollBgcJobStatus(data.jobId);
+
+      // Add job to history
+      addJobToHistory(data.jobId, "bgc");
 
     } catch (error) {
       console.error('Error during BGC search:', error);
@@ -929,23 +1013,6 @@ export function SearchClient() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Job Type</Label>
-              <RadioGroup 
-                value={jobUuidType} 
-                onValueChange={setJobUuidType}
-                className="flex space-x-4"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="sequence" id="sequence-type" />
-                  <Label htmlFor="sequence-type">Sequence</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="bgc" id="bgc-type" />
-                  <Label htmlFor="bgc-type">BGC</Label>
-                </div>
-              </RadioGroup>
-            </div>
 
             <Button 
               onClick={handleJobUuidSearch} 
@@ -955,6 +1022,35 @@ export function SearchClient() {
             </Button>
           </div>
         </div>
+
+        {/* Job History */}
+        {jobHistory.length > 0 && (
+          <div className="mt-8 p-4 border rounded-md">
+            <h3 className="font-semibold mb-4">Your Recent Jobs</h3>
+            <div className="space-y-2">
+              {jobHistory.map((job) => (
+                <div 
+                  key={job.jobId} 
+                  className="flex items-center justify-between bg-muted p-3 rounded-md"
+                >
+                  <div>
+                    <div className="font-medium">{job.type === "sequence" ? "Sequence Search" : "BGC Search"}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(job.timestamp).toLocaleString()} - {job.jobId}
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleJobUuidSearch(job.jobId)}
+                  >
+                    Load Results
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
