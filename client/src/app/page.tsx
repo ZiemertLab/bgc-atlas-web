@@ -2,10 +2,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, BarChart, Database, Terminal } from "lucide-react";
 import Link from "next/link";
+import { WorldMap } from "@/components/maps/world-map";
 
 export default function Home() {
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col min-h-screen">
       <section className="relative w-full bg-background">
         <div className="absolute inset-0 bg-grid-slate-900/[0.04] bg-[10px_10px] dark:bg-grid-slate-400/[0.05]"></div>
         <div className="relative mx-auto max-w-[1440px] px-4 py-24 text-center sm:px-6 sm:py-32 lg:px-8 lg:py-40">
@@ -45,6 +46,12 @@ export default function Home() {
             description="Programmatically access the BGC-Atlas database through our public API."
             href="/docs"
           />
+        </div>
+      </section>
+
+      <section className="w-full flex-1 flex flex-col py-8 sm:py-12">
+        <div className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-8 flex-1 flex flex-col w-full">
+          <WorldMap />
         </div>
       </section>
     </div>
