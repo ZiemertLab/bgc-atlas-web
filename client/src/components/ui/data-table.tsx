@@ -38,12 +38,30 @@ type SortState = {
   direction: SortDirection;
 }
 
+type FilterType = 'text' | 'select' | 'number' | 'date' | 'boolean';
+
+type FilterOption = {
+  label: string;
+  value: string;
+};
+
+type ColumnFilter = {
+  type: FilterType;
+  options?: FilterOption[];
+};
+
 type Column = {
   key: string;
   label: string;
   sortable?: boolean;
+  filterable?: boolean;
+  filter?: ColumnFilter;
   render?: (row: any) => React.ReactNode;
 }
+
+type FilterState = {
+  [key: string]: any;
+};
 
 type DataTableProps = {
   columns: Column[];
@@ -53,7 +71,9 @@ type DataTableProps = {
   limit: number;
   loading?: boolean;
   sortState?: SortState;
+  filterState?: FilterState;
   onSort?: (column: string) => void;
+  onFilter?: (column: string, value: any) => void;
   onPageChange: (page: number) => void;
   onPageSizeChange?: (pageSize: number) => void;
 }
@@ -66,7 +86,9 @@ export function DataTable({
   limit,
   loading = false,
   sortState = { column: "", direction: null },
+  filterState = {},
   onSort,
+  onFilter,
   onPageChange,
   onPageSizeChange
 }: DataTableProps) {
@@ -285,6 +307,11 @@ export function DataTable({
                   sortable={column.sortable}
                   sortDirection={sortState.column === column.key ? sortState.direction : null}
                   onSort={column.sortable && onSort ? () => onSort(column.key) : undefined}
+                  filterable={column.filterable}
+                  filterType={column.filter?.type}
+                  filterOptions={column.filter?.options}
+                  filterValue={filterState[column.key]}
+                  onFilter={onFilter ? (value) => onFilter(column.key, value) : undefined}
                 >
                   {column.label}
                 </TableHead>

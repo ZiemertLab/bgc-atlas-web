@@ -189,18 +189,20 @@ CREATE TABLE gcfs (
       – Linked to the assemblies table (assembly ↔ assemblies.id)
       – Linked to the GCF table (gcf_id ↔ gcfs.id)                              */
 CREATE TABLE bgcs (
-                      id              VARCHAR(50)  PRIMARY KEY,
-                      assembly        VARCHAR(100)  REFERENCES assemblies(id),  -- which assembly this BGC sits in
-                      contig          TEXT,
-                      start           INTEGER,
-                      end_pos           INTEGER,
-                      product_class   TEXT[]       NOT NULL,    -- e.g. {'NRPS','PKS'}
-                      product_type    TEXT[]       NOT NULL,    -- e.g. {'Type I PKS','Hybrid'}
-                      anchor          VARCHAR(15),
-                      filepath        TEXT,
-                      gcf_id          INTEGER      REFERENCES gcfs(id),
-                      gcf_membership  DOUBLE PRECISION,
-                      tax_id          INTEGER
+                      id SERIAL PRIMARY KEY,
+                      filename VARCHAR(200) NOT NULL,  -- Store the original filename
+                      assembly VARCHAR(100) REFERENCES assemblies(id),
+                      contig TEXT,
+                      start INTEGER,
+                      end_pos INTEGER,
+                      product_class TEXT[] NOT NULL,
+                      product_type TEXT[] NOT NULL,
+                      anchor VARCHAR(15),
+                      filepath TEXT,
+                      gcf_id INTEGER REFERENCES gcfs(id),
+                      gcf_membership DOUBLE PRECISION,
+                      tax_id INTEGER,
+                      CONSTRAINT bgcs_filename_unique UNIQUE (filename)
 );
 
 /* 3.  Performance indexes (tune as your dataset grows) */
@@ -209,3 +211,4 @@ CREATE INDEX idx_bgcs_assembly        ON bgcs(assembly);
 CREATE INDEX idx_bgcs_anchor          ON bgcs(anchor);
 CREATE INDEX idx_bgcs_product_class   ON bgcs USING GIN (product_class);
 CREATE INDEX idx_bgcs_product_type    ON bgcs USING GIN (product_type);
+CREATE INDEX idx_bgcs_filename ON bgcs(filename);

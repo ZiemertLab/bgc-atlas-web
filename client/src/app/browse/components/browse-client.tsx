@@ -11,12 +11,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { getBgcs, getGcfs, getSamples, getTaxonomy, getRuns, getBiomes, getStudies, getAssemblies } from "@/services/api";
+import { getBgcs, getGcfs, getSamples, getTaxonomy, getRuns, getBiomes, getStudies, getAssemblies, getAnalyses } from "@/services/api";
 
 // Type for sort state
 type SortState = {
   column: string;
   direction: "asc" | "desc" | null;
+};
+
+// Type for filter state
+type FilterState = {
+  [key: string]: any;
 };
 
 const FilterSection = ({ title, children }: { title: string, children: React.ReactNode }) => (
@@ -36,8 +41,9 @@ export function BrowseClient() {
   const [biomesData, setBiomesData] = useState({ data: [], total: 0, page: 1, limit: 10 });
   const [studiesData, setStudiesData] = useState({ data: [], total: 0, page: 1, limit: 10 });
   const [assembliesData, setAssembliesData] = useState({ data: [], total: 0, page: 1, limit: 10 });
+  const [analysesData, setAnalysesData] = useState({ data: [], total: 0, page: 1, limit: 10 });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("studies");
+  const [activeTab, setActiveTab] = useState("analyses");
   const [filtersVisible, setFiltersVisible] = useState(true);
 
   // Sorting states for each table
@@ -49,6 +55,18 @@ export function BrowseClient() {
   const [taxonomySort, setTaxonomySort] = useState<SortState>({ column: "", direction: null });
   const [bgcsSort, setBgcsSort] = useState<SortState>({ column: "", direction: null });
   const [assembliesSort, setAssembliesSort] = useState<SortState>({ column: "", direction: null });
+  const [analysesSort, setAnalysesSort] = useState<SortState>({ column: "", direction: null });
+
+  // Filtering states for each table
+  const [studiesFilter, setStudiesFilter] = useState<FilterState>({});
+  const [samplesFilter, setSamplesFilter] = useState<FilterState>({});
+  const [runsFilter, setRunsFilter] = useState<FilterState>({});
+  const [biomesFilter, setBiomesFilter] = useState<FilterState>({});
+  const [gcfsFilter, setGcfsFilter] = useState<FilterState>({});
+  const [taxonomyFilter, setTaxonomyFilter] = useState<FilterState>({});
+  const [bgcsFilter, setBgcsFilter] = useState<FilterState>({});
+  const [assembliesFilter, setAssembliesFilter] = useState<FilterState>({});
+  const [analysesFilter, setAnalysesFilter] = useState<FilterState>({});
 
   // Generic sorting function
   const handleSort = (
@@ -79,6 +97,36 @@ export function BrowseClient() {
   const handleTaxonomySort = (column: string) => handleSort(column, taxonomySort, setTaxonomySort);
   const handleBgcsSort = (column: string) => handleSort(column, bgcsSort, setBgcsSort);
   const handleAssembliesSort = (column: string) => handleSort(column, assembliesSort, setAssembliesSort);
+  const handleAnalysesSort = (column: string) => handleSort(column, analysesSort, setAnalysesSort);
+
+  // Generic filter function
+  const handleFilter = (
+    column: string,
+    value: any,
+    currentFilter: FilterState,
+    setFilter: React.Dispatch<React.SetStateAction<FilterState>>
+  ) => {
+    // If value is empty, remove the filter
+    if (value === "" || value === null || value === undefined) {
+      const newFilter = { ...currentFilter };
+      delete newFilter[column];
+      setFilter(newFilter);
+    } else {
+      // Otherwise, set the filter
+      setFilter({ ...currentFilter, [column]: value });
+    }
+  };
+
+  // Filter functions for each table
+  const handleStudiesFilter = (column: string, value: any) => handleFilter(column, value, studiesFilter, setStudiesFilter);
+  const handleSamplesFilter = (column: string, value: any) => handleFilter(column, value, samplesFilter, setSamplesFilter);
+  const handleRunsFilter = (column: string, value: any) => handleFilter(column, value, runsFilter, setRunsFilter);
+  const handleBiomesFilter = (column: string, value: any) => handleFilter(column, value, biomesFilter, setBiomesFilter);
+  const handleGcfsFilter = (column: string, value: any) => handleFilter(column, value, gcfsFilter, setGcfsFilter);
+  const handleTaxonomyFilter = (column: string, value: any) => handleFilter(column, value, taxonomyFilter, setTaxonomyFilter);
+  const handleBgcsFilter = (column: string, value: any) => handleFilter(column, value, bgcsFilter, setBgcsFilter);
+  const handleAssembliesFilter = (column: string, value: any) => handleFilter(column, value, assembliesFilter, setAssembliesFilter);
+  const handleAnalysesFilter = (column: string, value: any) => handleFilter(column, value, analysesFilter, setAnalysesFilter);
 
   // Page change handlers for each table
   const handleStudiesPageChange = (page: number) => {
@@ -111,6 +159,10 @@ export function BrowseClient() {
 
   const handleAssembliesPageChange = (page: number) => {
     setAssembliesData(prev => ({ ...prev, page }));
+  };
+
+  const handleAnalysesPageChange = (page: number) => {
+    setAnalysesData(prev => ({ ...prev, page }));
   };
 
   // Page size change handlers for each table
@@ -146,6 +198,10 @@ export function BrowseClient() {
     setAssembliesData(prev => ({ ...prev, limit: pageSize, page: 1 }));
   };
 
+  const handleAnalysesPageSizeChange = (pageSize: number) => {
+    setAnalysesData(prev => ({ ...prev, limit: pageSize, page: 1 }));
+  };
+
   // Server-side sorting is now used, so we don't need to sort the data client-side
 
   useEffect(() => {
@@ -161,7 +217,8 @@ export function BrowseClient() {
             page, 
             limit,
             sortColumn: column || undefined,
-            sortDirection: direction || undefined
+            sortDirection: direction || undefined,
+            filters: Object.keys(studiesFilter).length > 0 ? studiesFilter : undefined
           });
           console.log("Studies data:", response);
           setStudiesData(prev => ({ ...prev, ...response }));
@@ -172,7 +229,8 @@ export function BrowseClient() {
             page, 
             limit,
             sortColumn: column || undefined,
-            sortDirection: direction || undefined
+            sortDirection: direction || undefined,
+            filters: Object.keys(bgcsFilter).length > 0 ? bgcsFilter : undefined
           });
           console.log("BGCs data:", response);
           setBgcData(prev => ({ ...prev, ...response }));
@@ -183,7 +241,8 @@ export function BrowseClient() {
             page, 
             limit,
             sortColumn: column || undefined,
-            sortDirection: direction || undefined
+            sortDirection: direction || undefined,
+            filters: Object.keys(gcfsFilter).length > 0 ? gcfsFilter : undefined
           });
           console.log("GCFs data:", response);
           setGcfData(prev => ({ ...prev, ...response }));
@@ -194,7 +253,8 @@ export function BrowseClient() {
             page, 
             limit,
             sortColumn: column || undefined,
-            sortDirection: direction || undefined
+            sortDirection: direction || undefined,
+            filters: Object.keys(samplesFilter).length > 0 ? samplesFilter : undefined
           });
           console.log("Samples data:", response);
           setSampleData(prev => ({ ...prev, ...response }));
@@ -205,7 +265,8 @@ export function BrowseClient() {
             page, 
             limit,
             sortColumn: column || undefined,
-            sortDirection: direction || undefined
+            sortDirection: direction || undefined,
+            filters: Object.keys(taxonomyFilter).length > 0 ? taxonomyFilter : undefined
           });
           console.log("Taxonomy data:", response);
           setTaxonomyData(prev => ({ ...prev, ...response }));
@@ -216,7 +277,8 @@ export function BrowseClient() {
             page, 
             limit,
             sortColumn: column || undefined,
-            sortDirection: direction || undefined
+            sortDirection: direction || undefined,
+            filters: Object.keys(runsFilter).length > 0 ? runsFilter : undefined
           });
           console.log("Runs data:", response);
           setRunsData(prev => ({ ...prev, ...response }));
@@ -227,7 +289,8 @@ export function BrowseClient() {
             page, 
             limit,
             sortColumn: column || undefined,
-            sortDirection: direction || undefined
+            sortDirection: direction || undefined,
+            filters: Object.keys(biomesFilter).length > 0 ? biomesFilter : undefined
           });
           console.log("Biomes data:", response);
           setBiomesData(prev => ({ ...prev, ...response }));
@@ -238,10 +301,23 @@ export function BrowseClient() {
             page, 
             limit,
             sortColumn: column || undefined,
-            sortDirection: direction || undefined
+            sortDirection: direction || undefined,
+            filters: Object.keys(assembliesFilter).length > 0 ? assembliesFilter : undefined
           });
           console.log("Assemblies data:", response);
           setAssembliesData(prev => ({ ...prev, ...response }));
+        } else if (activeTab === "analyses") {
+          const { page, limit } = analysesData;
+          const { column, direction } = analysesSort;
+          const response = await getAnalyses({ 
+            page, 
+            limit,
+            sortColumn: column || undefined,
+            sortDirection: direction || undefined,
+            filters: Object.keys(analysesFilter).length > 0 ? analysesFilter : undefined
+          });
+          console.log("Analyses data:", response);
+          setAnalysesData(prev => ({ ...prev, ...response }));
         }
       } catch (error) {
         console.error(`Error fetching ${activeTab} data:`, error);
@@ -252,14 +328,15 @@ export function BrowseClient() {
 
     fetchData();
   }, [activeTab, 
-      studiesData.page, studiesData.limit, studiesSort,
-      bgcData.page, bgcData.limit, bgcsSort,
-      gcfData.page, gcfData.limit, gcfsSort,
-      sampleData.page, sampleData.limit, samplesSort,
-      taxonomyData.page, taxonomyData.limit, taxonomySort,
-      runsData.page, runsData.limit, runsSort,
-      biomesData.page, biomesData.limit, biomesSort,
-      assembliesData.page, assembliesData.limit, assembliesSort
+      studiesData.page, studiesData.limit, studiesSort, studiesFilter,
+      bgcData.page, bgcData.limit, bgcsSort, bgcsFilter,
+      gcfData.page, gcfData.limit, gcfsSort, gcfsFilter,
+      sampleData.page, sampleData.limit, samplesSort, samplesFilter,
+      taxonomyData.page, taxonomyData.limit, taxonomySort, taxonomyFilter,
+      runsData.page, runsData.limit, runsSort, runsFilter,
+      biomesData.page, biomesData.limit, biomesSort, biomesFilter,
+      assembliesData.page, assembliesData.limit, assembliesSort, assembliesFilter,
+      analysesData.page, analysesData.limit, analysesSort, analysesFilter
   ]);
 
   const renderEmptyState = (item: string) => (
@@ -278,23 +355,31 @@ export function BrowseClient() {
             {
               key: "id",
               label: "ID",
-              sortable: true
+              sortable: true,
+              filterable: true,
+              filter: { type: 'text' }
             },
             {
               key: "product_class",
               label: "Product Class",
               sortable: true,
+              filterable: true,
+              filter: { type: 'text' },
               render: (row) => Array.isArray(row.product_class) ? row.product_class.join(', ') : row.product_class
             },
             {
               key: "assembly_accession",
               label: "Assembly",
-              sortable: true
+              sortable: true,
+              filterable: true,
+              filter: { type: 'text' }
             },
             {
               key: "contig",
               label: "Location",
               sortable: true,
+              filterable: true,
+              filter: { type: 'text' },
               render: (row) => `${row.contig}:${row.start}-${row.end_pos}`
             }
           ]}
@@ -304,7 +389,9 @@ export function BrowseClient() {
           limit={bgcData.limit}
           loading={loading}
           sortState={bgcsSort}
+          filterState={bgcsFilter}
           onSort={handleBgcsSort}
+          onFilter={handleBgcsFilter}
           onPageChange={handleBgcsPageChange}
           onPageSizeChange={handleBgcsPageSizeChange}
         />
@@ -320,12 +407,16 @@ export function BrowseClient() {
             {
               key: "id",
               label: "GCF ID",
-              sortable: true
+              sortable: true,
+              filterable: true,
+              filter: { type: 'text' }
             },
             {
               key: "bgc_count",
               label: "BGC Count",
-              sortable: true
+              sortable: true,
+              filterable: true,
+              filter: { type: 'number' }
             }
           ]}
           data={gcfData.data}
@@ -334,7 +425,9 @@ export function BrowseClient() {
           limit={gcfData.limit}
           loading={loading}
           sortState={gcfsSort}
+          filterState={gcfsFilter}
           onSort={handleGcfsSort}
+          onFilter={handleGcfsFilter}
           onPageChange={handleGcfsPageChange}
           onPageSizeChange={handleGcfsPageSizeChange}
         />
@@ -350,29 +443,39 @@ export function BrowseClient() {
             {
               key: "id",
               label: "ID",
-              sortable: true
+              sortable: true,
+              filterable: true,
+              filter: { type: 'text' }
             },
             {
               key: "accession",
               label: "Accession",
-              sortable: true
+              sortable: true,
+              filterable: true,
+              filter: { type: 'text' }
             },
             {
               key: "wgs_accession",
               label: "WGS Accession",
               sortable: true,
+              filterable: true,
+              filter: { type: 'text' },
               render: (row) => row.wgs_accession || 'N/A'
             },
             {
               key: "coverage",
               label: "Coverage",
               sortable: true,
+              filterable: true,
+              filter: { type: 'number' },
               render: (row) => row.coverage ? `${row.coverage}x` : 'N/A'
             },
             {
               key: "bgc_count",
               label: "# BGCs",
-              sortable: true
+              sortable: true,
+              filterable: true,
+              filter: { type: 'number' }
             }
           ]}
           data={assembliesData.data}
@@ -381,9 +484,103 @@ export function BrowseClient() {
           limit={assembliesData.limit}
           loading={loading}
           sortState={assembliesSort}
+          filterState={assembliesFilter}
           onSort={handleAssembliesSort}
+          onFilter={handleAssembliesFilter}
           onPageChange={handleAssembliesPageChange}
           onPageSizeChange={handleAssembliesPageSizeChange}
+        />
+      </CardContent>
+    </Card>
+  );
+
+  const renderAnalysesTable = () => (
+    <Card>
+      <CardContent className="p-0">
+        <DataTable
+          columns={[
+            {
+              key: "id",
+              label: "ID",
+              sortable: true,
+              filterable: true,
+              filter: { type: 'text' }
+            },
+            {
+              key: "accession",
+              label: "Accession",
+              sortable: true,
+              filterable: true,
+              filter: { type: 'text' }
+            },
+            {
+              key: "experiment_type",
+              label: "Experiment Type",
+              sortable: true,
+              filterable: true,
+              filter: { type: 'text' },
+              render: (row) => row.experiment_type || 'N/A'
+            },
+            {
+              key: "pipeline_version",
+              label: "Pipeline Version",
+              sortable: true,
+              filterable: true,
+              filter: { type: 'text' },
+              render: (row) => row.pipeline_version || 'N/A'
+            },
+            {
+              key: "analysis_status",
+              label: "Status",
+              sortable: true,
+              filterable: true,
+              filter: { type: 'text' },
+              render: (row) => row.analysis_status || 'N/A'
+            },
+            {
+              key: "submit_time",
+              label: "Submit Time",
+              sortable: true,
+              filterable: true,
+              filter: { type: 'date' },
+              render: (row) => row.submit_time ? new Date(row.submit_time).toLocaleString() : 'N/A'
+            },
+            {
+              key: "complete_time",
+              label: "Complete Time",
+              sortable: true,
+              filterable: true,
+              filter: { type: 'date' },
+              render: (row) => row.complete_time ? new Date(row.complete_time).toLocaleString() : 'N/A'
+            },
+            {
+              key: "instrument_platform",
+              label: "Instrument Platform",
+              sortable: true,
+              filterable: true,
+              filter: { type: 'text' },
+              render: (row) => row.instrument_platform || 'N/A'
+            },
+            {
+              key: "instrument_model",
+              label: "Instrument Model",
+              sortable: true,
+              filterable: true,
+              filter: { type: 'text' },
+              render: (row) => row.instrument_model || 'N/A'
+            }
+          ]}
+          data={analysesData.data}
+          total={analysesData.total}
+          page={analysesData.page}
+          limit={analysesData.limit}
+          loading={loading}
+          sortState={analysesSort}
+          filterState={analysesFilter}
+          onSort={handleAnalysesSort}
+          onFilter={handleAnalysesFilter}
+          onPageChange={handleAnalysesPageChange}
+          onPageSizeChange={handleAnalysesPageSizeChange}
         />
       </CardContent>
     </Card>
@@ -481,8 +678,9 @@ export function BrowseClient() {
             </Button>
           </div>
         )}
-        <Tabs defaultValue="studies" value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-8">
+        <Tabs defaultValue="analyses" value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-9">
+            <TabsTrigger value="analyses">Analyses</TabsTrigger>
             <TabsTrigger value="studies">Studies</TabsTrigger>
             <TabsTrigger value="samples">Samples</TabsTrigger>
             <TabsTrigger value="runs">Runs</TabsTrigger>
@@ -501,29 +699,39 @@ export function BrowseClient() {
                       {
                         key: "accession",
                         label: "Accession",
-                        sortable: true
+                        sortable: true,
+                        filterable: true,
+                        filter: { type: 'text' }
                       },
                       {
                         key: "study_name",
                         label: "Name",
-                        sortable: true
+                        sortable: true,
+                        filterable: true,
+                        filter: { type: 'text' }
                       },
                       {
                         key: "bioproject",
                         label: "Bioproject",
                         sortable: true,
+                        filterable: true,
+                        filter: { type: 'text' },
                         render: (row) => row.bioproject || 'N/A'
                       },
                       {
                         key: "public_release_date",
                         label: "Release Date",
                         sortable: true,
+                        filterable: true,
+                        filter: { type: 'date' },
                         render: (row) => row.public_release_date ? new Date(row.public_release_date).toLocaleDateString() : 'N/A'
                       },
                       {
                         key: "bgc_count",
                         label: "BGC Count",
                         sortable: true,
+                        filterable: true,
+                        filter: { type: 'number' },
                         render: (row) => row.bgc_count || 0
                       }
                     ]}
@@ -533,7 +741,9 @@ export function BrowseClient() {
                     limit={studiesData.limit}
                     loading={loading}
                     sortState={studiesSort}
+                    filterState={studiesFilter}
                     onSort={handleStudiesSort}
+                    onFilter={handleStudiesFilter}
                     onPageChange={handleStudiesPageChange}
                     onPageSizeChange={handleStudiesPageSizeChange}
                   />
@@ -550,29 +760,39 @@ export function BrowseClient() {
                       {
                         key: "accession",
                         label: "ID",
-                        sortable: true
+                        sortable: true,
+                        filterable: true,
+                        filter: { type: 'text' }
                       },
                       {
                         key: "sample_name",
                         label: "Name",
-                        sortable: true
+                        sortable: true,
+                        filterable: true,
+                        filter: { type: 'text' }
                       },
                       {
                         key: "environment_biome",
                         label: "Biome",
                         sortable: true,
+                        filterable: true,
+                        filter: { type: 'text' },
                         render: (row) => row.environment_biome || 'N/A'
                       },
                       {
                         key: "collection_date",
                         label: "Collection Date",
                         sortable: true,
+                        filterable: true,
+                        filter: { type: 'date' },
                         render: (row) => row.collection_date ? new Date(row.collection_date).toLocaleDateString() : 'N/A'
                       },
                       {
                         key: "bgc_count",
                         label: "BGC Count",
                         sortable: true,
+                        filterable: true,
+                        filter: { type: 'number' },
                         render: (row) => row.bgc_count || 0
                       }
                     ]}
@@ -582,7 +802,9 @@ export function BrowseClient() {
                     limit={sampleData.limit}
                     loading={loading}
                     sortState={samplesSort}
+                    filterState={samplesFilter}
                     onSort={handleSamplesSort}
+                    onFilter={handleSamplesFilter}
                     onPageChange={handleSamplesPageChange}
                     onPageSizeChange={handleSamplesPageSizeChange}
                   />
@@ -599,29 +821,39 @@ export function BrowseClient() {
                       {
                         key: "accession",
                         label: "Accession",
-                        sortable: true
+                        sortable: true,
+                        filterable: true,
+                        filter: { type: 'text' }
                       },
                       {
                         key: "sample_name",
                         label: "Sample Name",
-                        sortable: true
+                        sortable: true,
+                        filterable: true,
+                        filter: { type: 'text' }
                       },
                       {
                         key: "experiment_type",
                         label: "Experiment Type",
                         sortable: true,
+                        filterable: true,
+                        filter: { type: 'text' },
                         render: (row) => row.experiment_type || 'N/A'
                       },
                       {
                         key: "instrument_platform",
                         label: "Platform",
                         sortable: true,
+                        filterable: true,
+                        filter: { type: 'text' },
                         render: (row) => row.instrument_platform || 'N/A'
                       },
                       {
                         key: "bgc_count",
                         label: "BGC Count",
                         sortable: true,
+                        filterable: true,
+                        filter: { type: 'number' },
                         render: (row) => row.bgc_count || 0
                       }
                     ]}
@@ -631,7 +863,9 @@ export function BrowseClient() {
                     limit={runsData.limit}
                     loading={loading}
                     sortState={runsSort}
+                    filterState={runsFilter}
                     onSort={handleRunsSort}
+                    onFilter={handleRunsFilter}
                     onPageChange={handleRunsPageChange}
                     onPageSizeChange={handleRunsPageSizeChange}
                   />
@@ -648,17 +882,23 @@ export function BrowseClient() {
                       {
                         key: "id",
                         label: "ID",
-                        sortable: true
+                        sortable: true,
+                        filterable: true,
+                        filter: { type: 'text' }
                       },
                       {
                         key: "lineage",
                         label: "Lineage",
-                        sortable: true
+                        sortable: true,
+                        filterable: true,
+                        filter: { type: 'text' }
                       },
                       {
                         key: "bgc_count",
                         label: "BGC Count",
                         sortable: true,
+                        filterable: true,
+                        filter: { type: 'number' },
                         render: (row) => row.bgc_count || 0
                       }
                     ]}
@@ -668,7 +908,9 @@ export function BrowseClient() {
                     limit={biomesData.limit}
                     loading={loading}
                     sortState={biomesSort}
+                    filterState={biomesFilter}
                     onSort={handleBiomesSort}
+                    onFilter={handleBiomesFilter}
                     onPageChange={handleBiomesPageChange}
                     onPageSizeChange={handleBiomesPageSizeChange}
                   />
@@ -678,6 +920,9 @@ export function BrowseClient() {
           </TabsContent>
           <TabsContent value="assemblies" className="mt-6">
             {assembliesData.data.length === 0 && !loading ? renderEmptyState("Assemblies") : renderAssembliesTable()}
+          </TabsContent>
+          <TabsContent value="analyses" className="mt-6">
+            {analysesData.data.length === 0 && !loading ? renderEmptyState("Analyses") : renderAnalysesTable()}
           </TabsContent>
           <TabsContent value="gcfs" className="mt-6">
             {gcfData.data.length === 0 && !loading ? renderEmptyState("GCFs") : renderGcfTable()}

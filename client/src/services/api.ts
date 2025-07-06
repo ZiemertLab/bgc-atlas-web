@@ -65,4 +65,9 @@ export const getAssemblies = async (params = {}) => {
   return response.data;
 };
 
+export const getAnalyses = async (params = {}) => {
+  const response = await api.get('/browse/analyses', { params });
+  return response.data;
+};
+
 export default api;
