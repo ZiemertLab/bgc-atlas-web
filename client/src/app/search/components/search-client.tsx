@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { UploadCloud, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { toast } from "@/hooks/use-toast";
 
 // Define a type for uploaded files
@@ -90,6 +90,12 @@ export function SearchClient() {
   const [sequenceJobProgress, setSequenceJobProgress] = useState<number>(0);
   const [sequenceJobResults, setSequenceJobResults] = useState<any>(null);
   const [isPollingSequenceJob, setIsPollingSequenceJob] = useState<boolean>(false);
+  const [sequenceQueueStats, setSequenceQueueStats] = useState<{
+    totalJobs: number;
+    activeJobs: number;
+    waitingJobs: number;
+    queuePosition: number;
+  } | null>(null);
 
   // Function to poll job status
   const pollSequenceJobStatus = async (jobId: string) => {
@@ -108,6 +114,17 @@ export function SearchClient() {
 
       setSequenceJobStatus(data.state);
       setSequenceJobProgress(data.progress || 0);
+
+      // Store queue statistics if available
+      if (data.queueStats) {
+        setSequenceQueueStats(data.queueStats);
+
+        // Also update the combined queue stats
+        setQueueStats({
+          ...data.queueStats,
+          queuePosition: 0 // Reset position for the overall view
+        });
+      }
 
       if (data.state === 'completed' && data.result) {
         setSequenceJobResults(data.result);
@@ -158,6 +175,7 @@ export function SearchClient() {
     setSequenceJobStatus(null);
     setSequenceJobProgress(0);
     setSequenceJobResults(null);
+    setSequenceQueueStats(null);
 
     try {
       // Create a FormData object to send the files
@@ -208,6 +226,138 @@ export function SearchClient() {
   const [bgcJobProgress, setBgcJobProgress] = useState<number>(0);
   const [bgcJobResults, setBgcJobResults] = useState<any>(null);
   const [isPollingBgcJob, setIsPollingBgcJob] = useState<boolean>(false);
+  const [bgcQueueStats, setBgcQueueStats] = useState<{
+    totalJobs: number;
+    activeJobs: number;
+    waitingJobs: number;
+    queuePosition: number;
+  } | null>(null);
+
+  // State for combined queue statistics
+  const [queueStats, setQueueStats] = useState<{
+    totalJobs: number;
+    activeJobs: number;
+    waitingJobs: number;
+    queuePosition: number;
+  } | null>(null);
+
+  // State for job UUID search
+  const [jobUuid, setJobUuid] = useState<string>("");
+  const [jobUuidType, setJobUuidType] = useState<string>("sequence");
+  const [isLoadingJobUuid, setIsLoadingJobUuid] = useState<boolean>(false);
+
+  // Function to handle job retrieval by UUID
+  const handleJobUuidSearch = async () => {
+    if (!jobUuid.trim()) {
+      toast({
+        title: "No UUID provided",
+        description: "Please enter a job UUID to search.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoadingJobUuid(true);
+
+    try {
+      const response = await fetch(`/api/search/status/${jobUuid}?type=${jobUuidType}`);
+
+      if (!response.ok) {
+        throw new Error('Failed to retrieve job');
+      }
+
+      const data = await response.json();
+
+      // Set the appropriate job state based on the job type
+      if (jobUuidType === 'sequence') {
+        setSequenceJobId(jobUuid);
+        setSequenceJobStatus(data.state);
+        setSequenceJobProgress(data.progress || 0);
+        if (data.result) {
+          setSequenceJobResults(data.result);
+        }
+        if (data.queueStats) {
+          setSequenceQueueStats(data.queueStats);
+        }
+
+        // If job is still in progress, start polling
+        if (data.state !== 'completed' && data.state !== 'failed') {
+          pollSequenceJobStatus(jobUuid);
+        }
+      } else if (jobUuidType === 'bgc') {
+        setBgcJobId(jobUuid);
+        setBgcJobStatus(data.state);
+        setBgcJobProgress(data.progress || 0);
+        if (data.result) {
+          setBgcJobResults(data.result);
+        }
+        if (data.queueStats) {
+          setBgcQueueStats(data.queueStats);
+        }
+
+        // If job is still in progress, start polling
+        if (data.state !== 'completed' && data.state !== 'failed') {
+          pollBgcJobStatus(jobUuid);
+        }
+      }
+
+      toast({
+        title: "Job retrieved",
+        description: `Job ${jobUuid} retrieved successfully.`,
+      });
+    } catch (error) {
+      console.error('Error retrieving job:', error);
+      toast({
+        title: "Error",
+        description: "Failed to retrieve job. Please check the UUID and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingJobUuid(false);
+    }
+  };
+
+  // Function to fetch queue statistics
+  const fetchQueueStats = async () => {
+    try {
+      // Fetch overall queue statistics (without type filter)
+      const response = await fetch('/api/search/queue-stats');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.queueStats) {
+          setQueueStats({
+            ...data.queueStats,
+            queuePosition: 0 // No specific job, so no queue position
+          });
+
+          // Also update the individual stats for backward compatibility
+          // with job status displays
+          setSequenceQueueStats({
+            ...data.queueStats,
+            queuePosition: 0
+          });
+          setBgcQueueStats({
+            ...data.queueStats,
+            queuePosition: 0
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching queue statistics:', error);
+    }
+  };
+
+  // Fetch queue statistics when the component mounts and periodically
+  useEffect(() => {
+    // Fetch queue statistics immediately
+    fetchQueueStats();
+
+    // Set up interval to fetch queue statistics every 10 seconds
+    const intervalId = setInterval(fetchQueueStats, 10000);
+
+    // Clean up interval when component unmounts
+    return () => clearInterval(intervalId);
+  }, []);
 
   // Function to poll BGC job status
   const pollBgcJobStatus = async (jobId: string) => {
@@ -226,6 +376,11 @@ export function SearchClient() {
 
       setBgcJobStatus(data.state);
       setBgcJobProgress(data.progress || 0);
+
+      // Store queue statistics if available
+      if (data.queueStats) {
+        setBgcQueueStats(data.queueStats);
+      }
 
       if (data.state === 'completed' && data.result) {
         setBgcJobResults(data.result);
@@ -276,6 +431,7 @@ export function SearchClient() {
     setBgcJobStatus(null);
     setBgcJobProgress(0);
     setBgcJobResults(null);
+    setBgcQueueStats(null);
 
     try {
       // Create a FormData object to send the files
@@ -323,6 +479,29 @@ export function SearchClient() {
   return (
     <Card>
       <CardContent className="p-6">
+        {/* Queue Statistics Display */}
+        <div className="mb-6 p-4 bg-muted rounded-md">
+          <h3 className="font-semibold mb-2">Current Queue Status</h3>
+          <div>
+            {queueStats ? (
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div>
+                  <span className="font-medium">Total Jobs:</span> {queueStats.totalJobs}
+                </div>
+                <div>
+                  <span className="font-medium">Running Jobs:</span> {queueStats.activeJobs}
+                </div>
+                <div>
+                  <span className="font-medium">Queued Jobs:</span> {queueStats.waitingJobs}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Loading queue statistics...</p>
+            )}
+          </div>
+        </div>
+
+
         <Tabs defaultValue="metadata">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="metadata">Metadata Search</TabsTrigger>
@@ -577,6 +756,26 @@ export function SearchClient() {
                     ></div>
                   </div>
 
+                  {/* Queue statistics */}
+                  {sequenceQueueStats && (
+                    <div className="mt-2 text-sm grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="font-medium">Total Jobs:</span> {sequenceQueueStats.totalJobs}
+                      </div>
+                      <div>
+                        <span className="font-medium">Running Jobs:</span> {sequenceQueueStats.activeJobs}
+                      </div>
+                      <div>
+                        <span className="font-medium">Queued Jobs:</span> {sequenceQueueStats.waitingJobs}
+                      </div>
+                      {sequenceQueueStats.queuePosition > 0 && (
+                        <div>
+                          <span className="font-medium">Queue Position:</span> {sequenceQueueStats.queuePosition}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {isPollingSequenceJob && (
                     <p className="text-xs text-muted-foreground mt-1">Waiting for results...</p>
                   )}
@@ -607,6 +806,26 @@ export function SearchClient() {
                       style={{ width: `${bgcJobProgress}%` }}
                     ></div>
                   </div>
+
+                  {/* Queue statistics */}
+                  {bgcQueueStats && (
+                    <div className="mt-2 text-sm grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="font-medium">Total Jobs:</span> {bgcQueueStats.totalJobs}
+                      </div>
+                      <div>
+                        <span className="font-medium">Running Jobs:</span> {bgcQueueStats.activeJobs}
+                      </div>
+                      <div>
+                        <span className="font-medium">Queued Jobs:</span> {bgcQueueStats.waitingJobs}
+                      </div>
+                      {bgcQueueStats.queuePosition > 0 && (
+                        <div>
+                          <span className="font-medium">Queue Position:</span> {bgcQueueStats.queuePosition}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {isPollingBgcJob && (
                     <p className="text-xs text-muted-foreground mt-1">Waiting for results...</p>
@@ -692,6 +911,49 @@ export function SearchClient() {
               </div>
             </TabsContent>
           </Tabs>
+        </div>
+
+        <Separator className="my-8" />
+
+        {/* Job UUID Search */}
+        <div className="mt-8 p-4 border rounded-md">
+          <h3 className="font-semibold mb-4">Retrieve Previous Job</h3>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="job-uuid">Job UUID</Label>
+              <Input 
+                id="job-uuid" 
+                placeholder="Enter job UUID" 
+                value={jobUuid}
+                onChange={(e) => setJobUuid(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Job Type</Label>
+              <RadioGroup 
+                value={jobUuidType} 
+                onValueChange={setJobUuidType}
+                className="flex space-x-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="sequence" id="sequence-type" />
+                  <Label htmlFor="sequence-type">Sequence</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="bgc" id="bgc-type" />
+                  <Label htmlFor="bgc-type">BGC</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <Button 
+              onClick={handleJobUuidSearch} 
+              disabled={isLoadingJobUuid}
+            >
+              {isLoadingJobUuid ? "Loading..." : "Retrieve Job"}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

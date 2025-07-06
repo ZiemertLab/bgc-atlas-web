@@ -851,14 +851,15 @@ router.get('/browse/analyses', async (req, res) => {
   }
 });
 
-// Import the queues
-const { sequenceSearchQueue, bgcSearchQueue } = require('../queue');
+// Import the queue
+const { searchQueue } = require('../queue');
 
 // Sequence Search endpoint
 router.post('/search/sequence', upload.array('files'), async (req, res) => {
   try {
     // Files are uploaded to req.sessionDir with UUID req.sessionId
     const jobData = {
+      type: 'sequence', // Add type field to identify the job type
       sessionId: req.sessionId,
       uploadPath: req.sessionDir,
       files: req.files.map(file => ({
@@ -867,8 +868,12 @@ router.post('/search/sequence', upload.array('files'), async (req, res) => {
       }))
     };
 
-    // Add job to the sequence search queue
-    const job = await sequenceSearchQueue.add(jobData, {
+    // Generate a UUID for the job ID
+    const jobId = uuidv4();
+
+    // Add job to the search queue with custom job ID
+    const job = await searchQueue.add(jobData, {
+      jobId: jobId,
       attempts: 3,
       backoff: {
         type: 'exponential',
@@ -899,6 +904,7 @@ router.post('/search/bgc', upload.array('files'), async (req, res) => {
   try {
     // Files are uploaded to req.sessionDir with UUID req.sessionId
     const jobData = {
+      type: 'bgc', // Add type field to identify the job type
       sessionId: req.sessionId,
       uploadPath: req.sessionDir,
       files: req.files.map(file => ({
@@ -907,8 +913,12 @@ router.post('/search/bgc', upload.array('files'), async (req, res) => {
       }))
     };
 
-    // Add job to the BGC search queue
-    const job = await bgcSearchQueue.add(jobData, {
+    // Generate a UUID for the job ID
+    const jobId = uuidv4();
+
+    // Add job to the search queue with custom job ID
+    const job = await searchQueue.add(jobData, {
+      jobId: jobId,
       attempts: 3,
       backoff: {
         type: 'exponential',
@@ -940,21 +950,21 @@ router.get('/search/status/:jobId', async (req, res) => {
     const { jobId } = req.params;
     const { type } = req.query;
 
-    // Determine which queue to use based on the type parameter
-    let queue;
-    if (type === 'sequence') {
-      queue = sequenceSearchQueue;
-    } else if (type === 'bgc') {
-      queue = bgcSearchQueue;
-    } else {
+    // Validate the search type
+    if (type !== 'sequence' && type !== 'bgc') {
       return res.status(400).json({ error: 'Invalid search type. Must be "sequence" or "bgc".' });
     }
 
-    // Get job from queue
-    const job = await queue.getJob(jobId);
+    // Get job from the single queue
+    const job = await searchQueue.getJob(jobId);
 
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
+    }
+
+    // Verify that the job type matches the requested type
+    if (job.data.type !== type) {
+      return res.status(400).json({ error: `Job ${jobId} is not a ${type} search job` });
     }
 
     // Get job state and progress
@@ -967,14 +977,70 @@ router.get('/search/status/:jobId', async (req, res) => {
       result = await job.finished();
     }
 
+    // Get all jobs from the queue
+    const waitingJobs = await searchQueue.getWaitingCount();
+    const activeJobs = await searchQueue.getActiveCount();
+    const totalJobs = waitingJobs + activeJobs;
+
+    // Get queue position of the job
+    let queuePosition = 0;
+    if (state === 'waiting') {
+      // Get all waiting jobs
+      const waitingJobsData = await searchQueue.getJobs(['waiting']);
+      // Find the position of the current job in the waiting queue
+      queuePosition = waitingJobsData.findIndex(waitingJob => waitingJob.id === jobId) + 1;
+    }
+
     res.json({
       jobId,
       state,
       progress,
-      result
+      result,
+      queueStats: {
+        totalJobs,
+        activeJobs,
+        waitingJobs,
+        queuePosition
+      }
     });
   } catch (error) {
     console.error('Error getting job status:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get queue statistics endpoint
+router.get('/search/queue-stats', async (req, res) => {
+  try {
+    const { type } = req.query;
+
+    // Validate the search type if provided
+    if (type && type !== 'sequence' && type !== 'bgc') {
+      return res.status(400).json({ error: 'Invalid search type. Must be "sequence" or "bgc".' });
+    }
+
+    // Get all jobs from the queue
+    const allJobs = await searchQueue.getJobs(['waiting', 'active']);
+
+    // Filter jobs by type if requested
+    const filteredJobs = type 
+      ? allJobs.filter(job => job.data.type === type)
+      : allJobs;
+
+    // Count active and waiting jobs
+    const activeJobs = filteredJobs.filter(job => job._state === 'active').length;
+    const waitingJobs = filteredJobs.filter(job => job._state === 'waiting').length;
+    const totalJobs = activeJobs + waitingJobs;
+
+    res.json({
+      queueStats: {
+        totalJobs,
+        activeJobs,
+        waitingJobs
+      }
+    });
+  } catch (error) {
+    console.error('Error getting queue statistics:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -985,21 +1051,20 @@ router.get('/search/session/:sessionId', async (req, res) => {
     const { sessionId } = req.params;
     const { type } = req.query;
 
-    // Determine which queue to use based on the type parameter
-    let queue;
-    if (type === 'sequence') {
-      queue = sequenceSearchQueue;
-    } else if (type === 'bgc') {
-      queue = bgcSearchQueue;
-    } else {
+    // Validate the search type if provided
+    if (type && type !== 'sequence' && type !== 'bgc') {
       return res.status(400).json({ error: 'Invalid search type. Must be "sequence" or "bgc".' });
     }
 
-    // Get all jobs from queue
-    const jobs = await queue.getJobs(['waiting', 'active', 'completed', 'failed']);
+    // Get all jobs from the single queue
+    const jobs = await searchQueue.getJobs(['waiting', 'active', 'completed', 'failed']);
 
-    // Filter jobs by sessionId
-    const sessionJobs = jobs.filter(job => job.data.sessionId === sessionId);
+    // Filter jobs by sessionId and type if provided
+    const sessionJobs = jobs.filter(job => {
+      const matchesSession = job.data.sessionId === sessionId;
+      const matchesType = type ? job.data.type === type : true;
+      return matchesSession && matchesType;
+    });
 
     // Get state and progress for each job
     const jobsWithStatus = await Promise.all(sessionJobs.map(async (job) => {
@@ -1014,6 +1079,7 @@ router.get('/search/session/:sessionId', async (req, res) => {
 
       return {
         jobId: job.id,
+        type: job.data.type,
         state,
         progress,
         result
