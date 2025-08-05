@@ -7,8 +7,6 @@ import {
   BarChart,
   CartesianGrid,
   Legend,
-  Line,
-  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -16,8 +14,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import Image from 'next/image';
-import { getKpiData, getBgcClassesData, getGrowthData } from "@/services/api";
+import { getKpiData, getBgcClassesData } from "@/services/api";
 
 export function StatsDashboard() {
   const [kpiData, setKpiData] = useState([
@@ -28,22 +25,19 @@ export function StatsDashboard() {
   ]);
 
   const [barChartData, setBarChartData] = useState([]);
-  const [lineChartData, setLineChartData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [kpiResponse, bgcClassesResponse, growthResponse] = await Promise.all([
+        const [kpiResponse, bgcClassesResponse] = await Promise.all([
           getKpiData(),
-          getBgcClassesData(),
-          getGrowthData()
+          getBgcClassesData()
         ]);
 
         setKpiData(kpiResponse);
         setBarChartData(bgcClassesResponse);
-        setLineChartData(growthResponse);
       } catch (error) {
         console.error("Error fetching data:", error);
         // Fallback to mock data if API fails
@@ -61,14 +55,6 @@ export function StatsDashboard() {
           { name: "Terpene", count: 220 },
           { name: "Saccharide", count: 180 },
           { name: "Other", count: 150 },
-        ]);
-
-        setLineChartData([
-          { year: '2020', count: 100000 },
-          { year: '2021', count: 350000 },
-          { year: '2022', count: 700000 },
-          { year: '2023', count: 950000 },
-          { year: '2024', count: 1203456 },
         ]);
       } finally {
         setLoading(false);
@@ -125,37 +111,7 @@ export function StatsDashboard() {
         </CardContent>
       </Card>
 
-      <Card className="md:col-span-2 lg:col-span-4">
-        <CardHeader>
-            <CardTitle className="font-headline">Sample Locations</CardTitle>
-        </CardHeader>
-        <CardContent>
-            <div className="w-full aspect-video relative rounded-lg overflow-hidden border">
-                 <Image src="https://placehold.co/1200x600" alt="World map heatmap" layout="fill" objectFit="cover" data-ai-hint="world map" />
-                 <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                    <p className="text-lg font-bold text-primary-foreground bg-primary/80 px-4 py-2 rounded">Placeholder World Map Heatmap</p>
-                 </div>
-            </div>
-        </CardContent>
-      </Card>
 
-      <Card className="md:col-span-2 lg:col-span-4">
-        <CardHeader>
-            <CardTitle className="font-headline">Database Growth</CardTitle>
-        </CardHeader>
-        <CardContent>
-             <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={lineChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="year" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="count" name="Total BGCs" stroke="hsl(var(--primary))" strokeWidth={2} />
-                </LineChart>
-            </ResponsiveContainer>
-        </CardContent>
-      </Card>
     </div>
   );
 }

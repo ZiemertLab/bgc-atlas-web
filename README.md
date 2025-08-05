@@ -227,7 +227,6 @@ The following API endpoints are available:
 
 - `GET /api/stats/kpi` - Get key performance indicators (counts of studies, samples, runs, assemblies)
 - `GET /api/stats/bgc-classes` - Get BGC class distribution
-- `GET /api/stats/growth` - Get growth of studies over time
 
 ### Browse Endpoints
 

@@ -54,16 +54,48 @@ router.get('/stats/kpi', async (req, res) => {
     const samplesCount = await db.query('SELECT COUNT(*) FROM samples');
     const runsCount = await db.query('SELECT COUNT(*) FROM runs');
     const assembliesCount = await db.query('SELECT COUNT(*) FROM assemblies');
+    
+    // Get datasets analyzed (analyses)
+    const datasetsAnalyzedCount = await db.query('SELECT COUNT(*) FROM analyses');
+    
+    // Get complete analyses (those with complete_time set or analysis_status indicating completion)
+    const completeAnalysesCount = await db.query(`
+      SELECT COUNT(*) FROM analyses 
+      WHERE complete_time IS NOT NULL OR analysis_status = 'completed'
+    `);
+    
+    // Get BGCs identified
     const bgcsCount = await db.query('SELECT COUNT(*) FROM bgcs');
+    
+    // Get complete BGCs (those linked to complete analyses)
+    const completeBgcsCount = await db.query(`
+      SELECT COUNT(DISTINCT b.id) FROM bgcs b
+      JOIN assemblies a ON b.assembly = a.id
+      JOIN assembly_analyses aa ON a.id = aa.assembly_id
+      JOIN analyses an ON aa.analysis_id = an.id
+      WHERE an.complete_time IS NOT NULL OR an.analysis_status = 'completed'
+    `);
+    
+    // Get GCFs identified
     const gcfsCount = await db.query('SELECT COUNT(*) FROM gcfs');
+    
+    // Get complete GCFs (those containing at least one complete BGC)
+    const completeGcfsCount = await db.query(`
+      SELECT COUNT(DISTINCT g.id) FROM gcfs g
+      JOIN bgcs b ON g.id = b.gcf_id
+      JOIN assemblies a ON b.assembly = a.id
+      JOIN assembly_analyses aa ON a.id = aa.assembly_id
+      JOIN analyses an ON aa.analysis_id = an.id
+      WHERE an.complete_time IS NOT NULL OR an.analysis_status = 'completed'
+    `);
 
     const kpiData = [
-      { title: "Total Studies", value: studiesCount.rows[0].count },
-      { title: "Total Samples", value: samplesCount.rows[0].count },
-      { title: "Total Runs", value: runsCount.rows[0].count },
-      { title: "Total Assemblies", value: assembliesCount.rows[0].count },
-      { title: "Total BGCs", value: bgcsCount.rows[0].count },
-      { title: "Total GCFs", value: gcfsCount.rows[0].count },
+      { title: "Datasets Analyzed", value: datasetsAnalyzedCount.rows[0].count },
+      { title: "Complete Analyses", value: completeAnalysesCount.rows[0].count },
+      { title: "BGCs Identified", value: bgcsCount.rows[0].count },
+      { title: "Complete BGCs", value: completeBgcsCount.rows[0].count },
+      { title: "GCFs Identified", value: gcfsCount.rows[0].count },
+      { title: "Complete GCFs", value: completeGcfsCount.rows[0].count },
     ];
 
     res.json(kpiData);
@@ -93,27 +125,6 @@ router.get('/stats/bgc-classes', async (req, res) => {
   }
 });
 
-router.get('/stats/growth', async (req, res) => {
-  try {
-    // Get study counts by year
-    const result = await db.query(`
-      SELECT EXTRACT(YEAR FROM public_release_date) as year, COUNT(*) as count
-      FROM studies
-      GROUP BY EXTRACT(YEAR FROM public_release_date)
-      ORDER BY year
-    `);
-
-    const lineChartData = result.rows.map(row => ({
-      year: row.year.toString(),
-      count: parseInt(row.count)
-    }));
-
-    res.json(lineChartData);
-  } catch (error) {
-    console.error('Error fetching growth data:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
 
 // Browse endpoints
 router.get('/browse/studies', async (req, res) => {

@@ -52,10 +52,6 @@ export const getBgcClassesData = async () => {
   return response.data;
 };
 
-export const getGrowthData = async () => {
-  const response = await api.get('/stats/growth');
-  return response.data;
-};
 
 // Browse API
 export const getStudies = async (params = {}) => {

@@ -202,6 +202,7 @@ CREATE TABLE bgcs (
                       gcf_id INTEGER REFERENCES gcfs(id),
                       gcf_membership DOUBLE PRECISION,
                       tax_id INTEGER,
+                      is_complete BOOLEAN DEFAULT TRUE,  -- Whether BGC is complete (not on contig edge)
                       CONSTRAINT bgcs_filename_unique UNIQUE (filename)
 );
 
@@ -212,7 +213,7 @@ CREATE INDEX idx_bgcs_anchor          ON bgcs(anchor);
 CREATE INDEX idx_bgcs_product_class   ON bgcs USING GIN (product_class);
 CREATE INDEX idx_bgcs_product_type    ON bgcs USING GIN (product_type);
 CREATE INDEX idx_bgcs_filename ON bgcs(filename);
-
+CREATE INDEX idx_bgcs_is_complete ON bgcs(is_complete);
 
 
 CREATE VIEW bgcs_per_assembly AS

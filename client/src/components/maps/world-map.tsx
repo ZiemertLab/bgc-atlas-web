@@ -161,14 +161,14 @@ export function WorldMap() {
   useLeafletMap(containerRef, data);
 
   return (
-      <Card className="w-full flex flex-col">
-        <CardHeader>
+      <Card className="w-full flex flex-col flex-1 min-h-0">
+        <CardHeader className="flex-shrink-0">
           <CardTitle className="font-headline text-2xl text-center">
-            Global BGC Distribution
+            
           </CardTitle>
         </CardHeader>
 
-        <CardContent>
+        <CardContent className="flex-1 flex flex-col min-h-0">
           {loading && (
               <p className="text-center p-4">Loading map… please wait</p>
           )}
@@ -177,8 +177,8 @@ export function WorldMap() {
           )}
           <div
               ref={containerRef}
-              className="w-full rounded-md"
-              style={{ height: 1000 }}
+              className="w-full rounded-md flex-1 min-h-0"
+              style={{ minHeight: 300 }}
           />
         </CardContent>
       </Card>
