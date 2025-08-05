@@ -1,4 +1,5 @@
 import { WorldMap } from "@/components/maps/world-map";
+import { StatsSection } from "@/components/stats/stats-section";
 
 export default function Home() {
   return (
@@ -15,8 +16,10 @@ export default function Home() {
         </div>
       </section>
 
+      <StatsSection />
+
       <section className="w-full flex-1 flex flex-col py-8 sm:py-12">
-        <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8 flex-1 flex flex-col w-full">
+        <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8 flex-1 flex flex-col w-full min-h-[600px]">
           <WorldMap />
         </div>
       </section>

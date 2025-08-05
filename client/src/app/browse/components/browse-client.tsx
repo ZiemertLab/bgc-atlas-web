@@ -360,8 +360,7 @@ export function BrowseClient() {
               key: "bgc_count",
               label: "BGC Count",
               sortable: true,
-              filterable: true,
-              filter: { type: 'number' }
+              filterable: false
             }
           ]}
           data={gcfData.data}
@@ -396,16 +395,14 @@ export function BrowseClient() {
               key: "bgc_count",
               label: "BGC Count",
               sortable: true,
-              filterable: true,
-              filter: { type: 'number' },
+              filterable: false,
               render: (row) => row.bgc_count !== undefined ? row.bgc_count : 'N/A'
             },
             {
               key: "latitudes",
               label: "Latitude",
               sortable: true,
-              filterable: true,
-              filter: { type: 'number' },
+              filterable: false,
               render: (row) => {
                 const text = row.latitudes && row.latitudes.length > 0 ? row.latitudes.join(', ') : 'N/A';
                 return <TruncatedText text={text} />;
@@ -415,8 +412,7 @@ export function BrowseClient() {
               key: "longitudes",
               label: "Longitude",
               sortable: true,
-              filterable: true,
-              filter: { type: 'number' },
+              filterable: false,
               render: (row) => {
                 const text = row.longitudes && row.longitudes.length > 0 ? row.longitudes.join(', ') : 'N/A';
                 return <TruncatedText text={text} />;
@@ -463,8 +459,7 @@ export function BrowseClient() {
               key: "environment_biomes",
               label: "Environment Biome",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => {
                 const text = row.environment_biomes && row.environment_biomes.length > 0 ? row.environment_biomes.join(', ') : 'N/A';
                 return <TruncatedText text={text} />;
@@ -474,8 +469,7 @@ export function BrowseClient() {
               key: "environment_features",
               label: "Environment Feature",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => {
                 const text = row.environment_features && row.environment_features.length > 0 ? row.environment_features.join(', ') : 'N/A';
                 return <TruncatedText text={text} />;
@@ -485,8 +479,7 @@ export function BrowseClient() {
               key: "environment_materials",
               label: "Environment Material",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => {
                 const text = row.environment_materials && row.environment_materials.length > 0 ? row.environment_materials.join(', ') : 'N/A';
                 return <TruncatedText text={text} />;
@@ -496,16 +489,14 @@ export function BrowseClient() {
               key: "host_tax_ids",
               label: "Host Tax ID",
               sortable: true,
-              filterable: true,
-              filter: { type: 'number' },
+              filterable: false,
               render: (row) => row.host_tax_ids && row.host_tax_ids.length > 0 ? row.host_tax_ids.join(', ') : 'N/A'
             },
             {
               key: "species",
               label: "Species",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => {
                 const text = row.species && row.species.length > 0 ? row.species.join(', ') : 'N/A';
                 return <TruncatedText text={text} />;
@@ -515,8 +506,7 @@ export function BrowseClient() {
               key: "study_names",
               label: "Study Name",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => {
                 const text = row.study_names && row.study_names.length > 0 ? row.study_names.join(', ') : 'N/A';
                 return <TruncatedText text={text} />;
@@ -526,8 +516,7 @@ export function BrowseClient() {
               key: "study_accessions",
               label: "Study Accession",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => {
                 const text = row.study_accessions && row.study_accessions.length > 0 ? row.study_accessions.join(', ') : 'N/A';
                 return <TruncatedText text={text} />;
@@ -537,8 +526,7 @@ export function BrowseClient() {
               key: "bioprojects",
               label: "Bioproject",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => {
                 const text = row.bioprojects && row.bioprojects.length > 0 ? row.bioprojects.join(', ') : 'N/A';
                 return <TruncatedText text={text} />;
@@ -548,8 +536,7 @@ export function BrowseClient() {
               key: "biome_lineages",
               label: "Biome Lineage",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => {
                 const text = row.biome_lineages && row.biome_lineages.length > 0 ? row.biome_lineages.join(', ') : 'N/A';
                 return <TruncatedText text={text} />;
@@ -559,8 +546,7 @@ export function BrowseClient() {
               key: "publication_dois",
               label: "Publications",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => {
                 let text;
                 if (row.publication_dois && row.publication_dois.length > 0) {
@@ -577,8 +563,7 @@ export function BrowseClient() {
               key: "publication_titles",
               label: "Study Publications",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => {
                 let text;
                 if (row.publication_titles && row.publication_titles.length > 0) {
@@ -729,39 +714,34 @@ export function BrowseClient() {
                         key: "accession",
                         label: "Accession",
                         sortable: true,
-                        filterable: true,
-                        filter: { type: 'text' }
+                        filterable: false
                       },
                       {
                         key: "study_name",
                         label: "Name",
                         sortable: true,
-                        filterable: true,
-                        filter: { type: 'text' },
+                        filterable: false,
                         render: (row) => <TruncatedText text={row.study_name || 'N/A'} />
                       },
                       {
                         key: "bioproject",
                         label: "Bioproject",
                         sortable: true,
-                        filterable: true,
-                        filter: { type: 'text' },
+                        filterable: false,
                         render: (row) => row.bioproject || 'N/A'
                       },
                       {
                         key: "public_release_date",
                         label: "Release Date",
                         sortable: true,
-                        filterable: true,
-                        filter: { type: 'date' },
+                        filterable: false,
                         render: (row) => row.public_release_date ? new Date(row.public_release_date).toLocaleDateString() : 'N/A'
                       },
                       {
                         key: "bgc_count",
                         label: "BGC Count",
                         sortable: true,
-                        filterable: true,
-                        filter: { type: 'number' },
+                        filterable: false,
                         render: (row) => row.bgc_count || 0
                       }
                     ]}
@@ -791,8 +771,7 @@ export function BrowseClient() {
                         key: "lineage",
                         label: "Lineage",
                         sortable: true,
-                        filterable: true,
-                        filter: { type: 'text' },
+                        filterable: false,
                         render: (row) => {
                           const lineage = row.lineage || 'N/A';
                           const displayText = lineage.startsWith('root:') ? lineage.substring(5) : lineage;
@@ -803,8 +782,7 @@ export function BrowseClient() {
                         key: "bgc_count",
                         label: "BGC Count",
                         sortable: true,
-                        filterable: true,
-                        filter: { type: 'number' },
+                        filterable: false,
                         render: (row) => row.bgc_count || 0
                       }
                     ]}
