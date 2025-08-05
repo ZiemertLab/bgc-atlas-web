@@ -10,14 +10,20 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { UploadCloud, X } from "lucide-react";
-import { useRef, useState, useEffect } from "react";
-import { toast } from "@/hooks/use-toast";
+import { useRef, useState, useEffect, AwaitedReactNode, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal} from "react";
+import {toast} from "@/hooks/use-toast";
 
 // Define a type for uploaded files
 type UploadedFile = {
   name: string;
   content: string;
+  size?: number;
 };
+
+// Upload limits from environment variables
+const MAX_UPLOAD_FILES = parseInt(process.env.NEXT_PUBLIC_MAX_UPLOAD_FILES || '50');
+const MAX_UPLOAD_SIZE_MB = parseInt(process.env.NEXT_PUBLIC_MAX_UPLOAD_SIZE_MB || '250');
+const MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024;
 
 // Define a type for job history
 type JobHistoryItem = {
@@ -47,18 +53,74 @@ export function SearchClient() {
   const [isBgcSearchLoading, setIsBgcSearchLoading] = useState(false);
   const gbkFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper function to calculate total size of files
+  const calculateTotalSize = (files: UploadedFile[]): number => {
+    return files.reduce((total, file) => total + (file.size || 0), 0);
+  };
+
+  // Helper function to check if adding new files would exceed limits
+  const wouldExceedLimits = (currentFiles: UploadedFile[], newFiles: File[]): { 
+    exceedsCount: boolean, 
+    exceedsSize: boolean, 
+    totalSize: number 
+  } => {
+    const totalCount = currentFiles.length + newFiles.length;
+    const currentSize = calculateTotalSize(currentFiles);
+    const newSize = newFiles.reduce((total, file) => total + file.size, 0);
+    const totalSize = currentSize + newSize;
+
+    return {
+      exceedsCount: totalCount > MAX_UPLOAD_FILES,
+      exceedsSize: totalSize > MAX_UPLOAD_SIZE_BYTES,
+      totalSize
+    };
+  };
+
   const handleFastaFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      Array.from(files).forEach(file => {
+      const fileArray = Array.from(files);
+
+      // Check if adding these files would exceed limits
+      const limits = wouldExceedLimits(fastaFiles, fileArray);
+
+      if (limits.exceedsCount) {
+        toast({
+          title: "Too many files",
+          description: `You can upload a maximum of ${MAX_UPLOAD_FILES} files. You're trying to upload ${fastaFiles.length + fileArray.length} files.`,
+          variant: "destructive",
+        });
+        // Reset the input value
+        if (fastaFileInputRef.current) {
+          fastaFileInputRef.current.value = '';
+        }
+        return;
+      }
+
+      if (limits.exceedsSize) {
+        toast({
+          title: "Files too large",
+          description: `Total upload size cannot exceed ${MAX_UPLOAD_SIZE_MB} MB. Your upload would be ${Math.round(limits.totalSize / (1024 * 1024))} MB.`,
+          variant: "destructive",
+        });
+        // Reset the input value
+        if (fastaFileInputRef.current) {
+          fastaFileInputRef.current.value = '';
+        }
+        return;
+      }
+
+      // Process files if they don't exceed limits
+      fileArray.forEach(file => {
         const reader = new FileReader();
         reader.onload = (event) => {
           const content = event.target?.result as string;
-          setFastaFiles(prev => [...prev, { name: file.name, content }]);
+          setFastaFiles(prev => [...prev, { name: file.name, content, size: file.size }]);
         };
         reader.readAsText(file);
       });
     }
+
     // Reset the input value so the same file can be selected again
     if (fastaFileInputRef.current) {
       fastaFileInputRef.current.value = '';
@@ -76,15 +138,48 @@ export function SearchClient() {
   const handleGbkFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      Array.from(files).forEach(file => {
+      const fileArray = Array.from(files);
+
+      // Check if adding these files would exceed limits
+      const limits = wouldExceedLimits(gbkFiles, fileArray);
+
+      if (limits.exceedsCount) {
+        toast({
+          title: "Too many files",
+          description: `You can upload a maximum of ${MAX_UPLOAD_FILES} files. You're trying to upload ${gbkFiles.length + fileArray.length} files.`,
+          variant: "destructive",
+        });
+        // Reset the input value
+        if (gbkFileInputRef.current) {
+          gbkFileInputRef.current.value = '';
+        }
+        return;
+      }
+
+      if (limits.exceedsSize) {
+        toast({
+          title: "Files too large",
+          description: `Total upload size cannot exceed ${MAX_UPLOAD_SIZE_MB} MB. Your upload would be ${Math.round(limits.totalSize / (1024 * 1024))} MB.`,
+          variant: "destructive",
+        });
+        // Reset the input value
+        if (gbkFileInputRef.current) {
+          gbkFileInputRef.current.value = '';
+        }
+        return;
+      }
+
+      // Process files if they don't exceed limits
+      fileArray.forEach(file => {
         const reader = new FileReader();
         reader.onload = (event) => {
           const content = event.target?.result as string;
-          setGbkFiles(prev => [...prev, { name: file.name, content }]);
+          setGbkFiles(prev => [...prev, { name: file.name, content, size: file.size }]);
         };
         reader.readAsText(file);
       });
     }
+
     // Reset the input value so the same file can be selected again
     if (gbkFileInputRef.current) {
       gbkFileInputRef.current.value = '';
@@ -106,7 +201,6 @@ export function SearchClient() {
   const [sequenceJobResults, setSequenceJobResults] = useState<any>(null);
   const [isPollingSequenceJob, setIsPollingSequenceJob] = useState<boolean>(false);
   const [sequenceQueueStats, setSequenceQueueStats] = useState<{
-    totalJobs: number;
     activeJobs: number;
     waitingJobs: number;
     queuePosition: number;
@@ -198,7 +292,7 @@ export function SearchClient() {
 
       // Convert the file content back to Blob objects and append to FormData
       for (const file of fastaFiles) {
-        const blob = new Blob([file.content], { type: 'text/plain' });
+        const blob = new Blob([file.content], {type: 'text/plain'});
         formData.append('files', blob, file.name);
       }
 
@@ -245,7 +339,6 @@ export function SearchClient() {
   const [bgcJobResults, setBgcJobResults] = useState<any>(null);
   const [isPollingBgcJob, setIsPollingBgcJob] = useState<boolean>(false);
   const [bgcQueueStats, setBgcQueueStats] = useState<{
-    totalJobs: number;
     activeJobs: number;
     waitingJobs: number;
     queuePosition: number;
@@ -253,7 +346,6 @@ export function SearchClient() {
 
   // State for combined queue statistics
   const [queueStats, setQueueStats] = useState<{
-    totalJobs: number;
     activeJobs: number;
     waitingJobs: number;
     queuePosition: number;
@@ -351,11 +443,31 @@ export function SearchClient() {
   // Function to fetch queue statistics
   const fetchQueueStats = async () => {
     try {
+      console.log('[DEBUG] Fetching queue statistics');
       // Fetch overall queue statistics (without type filter)
       const response = await fetch('/api/search/queue-stats');
+      console.log('[DEBUG] Queue stats response status:', response.status);
+
       if (response.ok) {
-        const data = await response.json();
+        const responseText = await response.text();
+        console.log('[DEBUG] Raw response text:', responseText);
+
+        let data;
+        try {
+          data = JSON.parse(responseText);
+          console.log('[DEBUG] Parsed response data:', data);
+        } catch (parseError) {
+          console.error('[DEBUG] Error parsing response JSON:', parseError);
+          return;
+        }
+
+        console.log('[DEBUG] Queue stats data structure:', Object.keys(data));
+
         if (data.queueStats) {
+          console.log('[DEBUG] Queue stats received:', data.queueStats);
+          console.log('[DEBUG] Queue stats activeJobs:', data.queueStats.activeJobs);
+          console.log('[DEBUG] Queue stats waitingJobs:', data.queueStats.waitingJobs);
+
           setQueueStats({
             ...data.queueStats,
             queuePosition: 0 // No specific job, so no queue position
@@ -371,10 +483,14 @@ export function SearchClient() {
             ...data.queueStats,
             queuePosition: 0
           });
+        } else {
+          console.log('[DEBUG] No queueStats found in response data');
         }
+      } else {
+        console.error('[DEBUG] Error response from queue-stats endpoint:', response.statusText);
       }
     } catch (error) {
-      console.error('Error fetching queue statistics:', error);
+      console.error('[DEBUG] Error fetching queue statistics:', error);
     }
   };
 
@@ -520,7 +636,7 @@ export function SearchClient() {
 
       // Convert the file content back to Blob objects and append to FormData
       for (const file of gbkFiles) {
-        const blob = new Blob([file.content], { type: 'text/plain' });
+        const blob = new Blob([file.content], {type: 'text/plain'});
         formData.append('files', blob, file.name);
       }
 
@@ -561,371 +677,395 @@ export function SearchClient() {
   };
 
   return (
-    <Card>
-      <CardContent className="p-6">
-        {/* Queue Statistics Display */}
-        <div className="mb-6 p-4 bg-muted rounded-md">
-          <h3 className="font-semibold mb-2">Current Queue Status</h3>
-          <div>
-            {queueStats ? (
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <span className="font-medium">Total Jobs:</span> {queueStats.totalJobs}
-                </div>
-                <div>
-                  <span className="font-medium">Running Jobs:</span> {queueStats.activeJobs}
-                </div>
-                <div>
-                  <span className="font-medium">Queued Jobs:</span> {queueStats.waitingJobs}
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Loading queue statistics...</p>
-            )}
-          </div>
-        </div>
-
-
-        <Tabs defaultValue="metadata">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="metadata">Metadata Search</TabsTrigger>
-            <TabsTrigger value="sequence">Sequence Search</TabsTrigger>
-            <TabsTrigger value="bgc">BGC Search</TabsTrigger>
-          </TabsList>
-          <TabsContent value="metadata" className="mt-6">
-            <form className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="bgc-id">BGC ID</Label>
-                <Input id="bgc-id" placeholder="e.g., BGC0001234" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="gcf-id">GCF ID</Label>
-                <Input id="gcf-id" placeholder="e.g., GCF_000567" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="taxon">Taxonomy</Label>
-                <Input id="taxon" placeholder="e.g., Streptomyces" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="class">Cluster Class</Label>
-                <Input id="class" placeholder="e.g., PKS" />
-              </div>
-              <div className="col-span-full">
-                <Button type="submit">Search</Button>
-              </div>
-            </form>
-          </TabsContent>
-          <TabsContent value="sequence" className="mt-6">
-            <div className="space-y-4">
-              <div className="p-4 bg-muted rounded-md">
-                <p className="text-sm">
-                  Upload FASTA files containing annotated protein sequences in multi-fasta format. Each file should represent one BGC.
-                </p>
-              </div>
-              <div 
-                className="flex flex-col items-center justify-center rounded-md border-2 border-dashed p-12 text-center"
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  const files = e.dataTransfer.files;
-                  if (files && files.length > 0) {
-                    Array.from(files).forEach(file => {
-                      const reader = new FileReader();
-                      reader.onload = (event) => {
-                        const content = event.target?.result as string;
-                        setFastaFiles(prev => [...prev, { name: file.name, content }]);
-                      };
-                      reader.readAsText(file);
-                    });
-                  }
-                }}
-              >
-                <UploadCloud className="h-12 w-12 text-muted-foreground" />
-                <p className="mt-4 font-semibold">Drag & drop FASTA files</p>
-                <p className="text-sm text-muted-foreground">or</p>
-                <Button variant="outline" className="mt-2" onClick={handleFastaBrowseClick}>
-                  Browse files
-                </Button>
-                <input
-                  type="file"
-                  ref={fastaFileInputRef}
-                  onChange={handleFastaFileSelect}
-                  accept=".fasta,.fa,.txt"
-                  className="hidden"
-                  multiple
-                />
-              </div>
-
-              {fastaFiles.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Uploaded Files</Label>
-                  <div className="border rounded-md p-4 space-y-2">
-                    {fastaFiles.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between bg-muted p-2 rounded-md">
-                        <span className="text-sm font-medium truncate">{file.name}</span>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => handleRemoveFastaFile(index)}
-                          className="h-8 w-8 p-0"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-4 border rounded-md p-4">
-                <h3 className="font-semibold">Search Options</h3>
-
-                <div className="space-y-2">
-                  <Label>Search Algorithm</Label>
-                  <RadioGroup 
-                    value={searchAlgorithm} 
-                    onValueChange={setSearchAlgorithm}
-                    className="flex flex-col space-y-1"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="diamond" id="diamond" />
-                      <Label htmlFor="diamond">Diamond</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="blastp" id="blastp" />
-                      <Label htmlFor="blastp">BlastP</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="cblaster" id="cblaster" />
-                      <Label htmlFor="cblaster">CBlaster</Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="complete-set-only" 
-                    checked={searchCompleteSetOnly}
-                    onCheckedChange={(checked) => 
-                      setSearchCompleteSetOnly(checked === true)
-                    }
-                  />
-                  <Label htmlFor="complete-set-only">
-                    Search only in the complete set of BGCs
-                  </Label>
-                </div>
-              </div>
-
-              <Button 
-                onClick={handleSequenceSearch} 
-                disabled={isSequenceSearchLoading}
-              >
-                {isSequenceSearchLoading ? "Uploading..." : "Search with Sequence"}
-              </Button>
-            </div>
-          </TabsContent>
-          <TabsContent value="bgc" className="mt-6">
-            <div className="space-y-4">
-              <div className="p-4 bg-muted rounded-md">
-                <p className="text-sm">
-                  Upload GenBank (GBK) files containing BGC information. The search will be conducted using BigSLiCE to find similar BGCs in the database.
-                </p>
-              </div>
-
-              <div 
-                className="flex flex-col items-center justify-center rounded-md border-2 border-dashed p-12 text-center"
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  const files = e.dataTransfer.files;
-                  if (files && files.length > 0) {
-                    Array.from(files).forEach(file => {
-                      const reader = new FileReader();
-                      reader.onload = (event) => {
-                        const content = event.target?.result as string;
-                        setGbkFiles(prev => [...prev, { name: file.name, content }]);
-                      };
-                      reader.readAsText(file);
-                    });
-                  }
-                }}
-              >
-                <UploadCloud className="h-12 w-12 text-muted-foreground" />
-                <p className="mt-4 font-semibold">Drag & drop GenBank files</p>
-                <p className="text-sm text-muted-foreground">or</p>
-                <Button variant="outline" className="mt-2" onClick={handleGbkBrowseClick}>
-                  Browse files
-                </Button>
-                <input
-                  type="file"
-                  ref={gbkFileInputRef}
-                  onChange={handleGbkFileSelect}
-                  accept=".gbk,.gb,.genbank"
-                  className="hidden"
-                  multiple
-                />
-              </div>
-
-              {gbkFiles.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Uploaded Files</Label>
-                  <div className="border rounded-md p-4 space-y-2">
-                    {gbkFiles.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between bg-muted p-2 rounded-md">
-                        <span className="text-sm font-medium truncate">{file.name}</span>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => handleRemoveGbkFile(index)}
-                          className="h-8 w-8 p-0"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <Button 
-                onClick={handleBgcSearch} 
-                disabled={isBgcSearchLoading}
-              >
-                {isBgcSearchLoading ? "Uploading..." : "Search with BGC"}
-              </Button>
-            </div>
-          </TabsContent>
-        </Tabs>
-
-        <Separator className="my-8" />
-
-        <div>
-          <h2 className="font-headline text-2xl font-bold">Results</h2>
-
-          {/* Job Status Display */}
-          {(sequenceJobId || bgcJobId) && (
-            <div className="mt-4 mb-6">
-              <h3 className="font-semibold mb-2">Job Status</h3>
-
-              {sequenceJobId && (
-                <div className="bg-muted p-4 rounded-md mb-2">
-                  <div className="flex justify-between items-center mb-2">
+      <Card>
+        <CardContent className="p-6">
+          {/* Queue Statistics Display */}
+          <div className="mb-6 p-4 bg-muted rounded-md">
+            <h3 className="font-semibold mb-2">Current Queue Status</h3>
+            <div>
+              {queueStats ? (
+                  <div className="grid grid-cols-3 gap-4 text-sm">
                     <div>
-                      <span className="font-medium">Sequence Search Job:</span> {sequenceJobId}
+                      <span className="font-medium">Running Jobs:</span> {queueStats.activeJobs}
                     </div>
-                    <div className="text-sm">
-                      Status: <span className={`font-semibold ${
-                        sequenceJobStatus === 'completed' ? 'text-green-600' : 
-                        sequenceJobStatus === 'failed' ? 'text-red-600' : 
-                        'text-amber-600'
-                      }`}>
+                    <div>
+                      <span className="font-medium">Queued Jobs:</span> {queueStats.waitingJobs}
+                    </div>
+                    <div>
+                      <span className="font-medium">Total Processed Jobs:</span> {queueStats.totalProcessedJobs || 0}
+                    </div>
+                  </div>
+              ) : (
+                  <p className="text-sm text-muted-foreground">Loading queue statistics...</p>
+              )}
+            </div>
+          </div>
+
+
+          <Tabs defaultValue="metadata">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="metadata">Metadata Search</TabsTrigger>
+              <TabsTrigger value="sequence">Sequence Search</TabsTrigger>
+              <TabsTrigger value="bgc">BGC Search</TabsTrigger>
+            </TabsList>
+            <TabsContent value="metadata" className="mt-6">
+              <form className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="bgc-id">BGC ID</Label>
+                  <Input id="bgc-id" placeholder="e.g., BGC0001234"/>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="gcf-id">GCF ID</Label>
+                  <Input id="gcf-id" placeholder="e.g., GCF_000567"/>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="taxon">Taxonomy</Label>
+                  <Input id="taxon" placeholder="e.g., Streptomyces"/>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="class">Cluster Class</Label>
+                  <Input id="class" placeholder="e.g., PKS"/>
+                </div>
+                <div className="col-span-full">
+                  <Button type="submit">Search</Button>
+                </div>
+              </form>
+            </TabsContent>
+            <TabsContent value="sequence" className="mt-6">
+              <div className="space-y-4">
+                <div className="p-4 bg-muted rounded-md">
+                  <p className="text-sm">
+                    Upload FASTA files containing annotated protein sequences in multi-fasta format. Each file should
+                    represent one BGC.
+                  </p>
+                </div>
+                <div
+                    className="flex flex-col items-center justify-center rounded-md border-2 border-dashed p-12 text-center"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const files = e.dataTransfer.files;
+                      if (files && files.length > 0) {
+                        const fileArray = Array.from(files);
+
+                        // Check if adding these files would exceed limits
+                        const limits = wouldExceedLimits(fastaFiles, fileArray);
+
+                        if (limits.exceedsCount) {
+                          toast({
+                            title: "Too many files",
+                            description: `You can upload a maximum of ${MAX_UPLOAD_FILES} files. You're trying to upload ${fastaFiles.length + fileArray.length} files.`,
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+
+                        if (limits.exceedsSize) {
+                          toast({
+                            title: "Files too large",
+                            description: `Total upload size cannot exceed ${MAX_UPLOAD_SIZE_MB} MB. Your upload would be ${Math.round(limits.totalSize / (1024 * 1024))} MB.`,
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+
+                        // Process files if they don't exceed limits
+                        fileArray.forEach(file => {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const content = event.target?.result as string;
+                            setFastaFiles(prev => [...prev, {name: file.name, content, size: file.size}]);
+                          };
+                          reader.readAsText(file);
+                        });
+                      }
+                    }}
+                >
+                  <UploadCloud className="h-12 w-12 text-muted-foreground"/>
+                  <p className="mt-4 font-semibold">Drag & drop FASTA files</p>
+                  <p className="text-sm text-muted-foreground">or</p>
+                  <Button variant="outline" className="mt-2" onClick={handleFastaBrowseClick}>
+                    Browse files
+                  </Button>
+                  <input
+                      type="file"
+                      ref={fastaFileInputRef}
+                      onChange={handleFastaFileSelect}
+                      accept=".fasta,.fa,.txt"
+                      className="hidden"
+                      multiple
+                  />
+                </div>
+
+                {fastaFiles.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Uploaded Files ({fastaFiles.length})</Label>
+                      <div className="border rounded-md p-4 space-y-2">
+                        {fastaFiles.map((file, index) => (
+                            <div key={index} className="flex items-center justify-between bg-muted p-2 rounded-md">
+                              <span className="text-sm font-medium truncate">{file.name}</span>
+                              <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveFastaFile(index)}
+                                  className="h-8 w-8 p-0"
+                              >
+                                <X className="h-4 w-4"/>
+                              </Button>
+                            </div>
+                        ))}
+                      </div>
+                    </div>
+                )}
+
+                <div className="space-y-4 border rounded-md p-4">
+                  <h3 className="font-semibold">Search Options</h3>
+
+                  <div className="space-y-2">
+                    <Label>Search Algorithm</Label>
+                    <RadioGroup
+                        value={searchAlgorithm}
+                        onValueChange={setSearchAlgorithm}
+                        className="flex flex-col space-y-1"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="diamond" id="diamond"/>
+                        <Label htmlFor="diamond">Diamond</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="blastp" id="blastp"/>
+                        <Label htmlFor="blastp">BlastP</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="cblaster" id="cblaster"/>
+                        <Label htmlFor="cblaster">CBlaster</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                        id="complete-set-only"
+                        checked={searchCompleteSetOnly}
+                        onCheckedChange={(checked) =>
+                            setSearchCompleteSetOnly(checked === true)
+                        }
+                    />
+                    <Label htmlFor="complete-set-only">
+                      Search only in the complete set of BGCs
+                    </Label>
+                  </div>
+                </div>
+
+                <Button
+                    onClick={handleSequenceSearch}
+                    disabled={isSequenceSearchLoading}
+                >
+                  {isSequenceSearchLoading ? "Uploading..." : "Search with Sequence"}
+                </Button>
+              </div>
+            </TabsContent>
+            <TabsContent value="bgc" className="mt-6">
+              <div className="space-y-4">
+                <div className="p-4 bg-muted rounded-md">
+                  <p className="text-sm">
+                    Upload GenBank (GBK) files containing BGC information. The search will be conducted using BigSLiCE
+                    to find similar BGCs in the database.
+                  </p>
+                </div>
+
+                <div
+                    className="flex flex-col items-center justify-center rounded-md border-2 border-dashed p-12 text-center"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const files = e.dataTransfer.files;
+                      if (files && files.length > 0) {
+                        const fileArray = Array.from(files);
+
+                        // Check if adding these files would exceed limits
+                        const limits = wouldExceedLimits(gbkFiles, fileArray);
+
+                        if (limits.exceedsCount) {
+                          toast({
+                            title: "Too many files",
+                            description: `You can upload a maximum of ${MAX_UPLOAD_FILES} files. You're trying to upload ${gbkFiles.length + fileArray.length} files.`,
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+
+                        if (limits.exceedsSize) {
+                          toast({
+                            title: "Files too large",
+                            description: `Total upload size cannot exceed ${MAX_UPLOAD_SIZE_MB} MB. Your upload would be ${Math.round(limits.totalSize / (1024 * 1024))} MB.`,
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+
+                        // Process files if they don't exceed limits
+                        fileArray.forEach(file => {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const content = event.target?.result as string;
+                            setGbkFiles(prev => [...prev, {name: file.name, content, size: file.size}]);
+                          };
+                          reader.readAsText(file);
+                        });
+                      }
+                    }}
+                >
+                  <UploadCloud className="h-12 w-12 text-muted-foreground"/>
+                  <p className="mt-4 font-semibold">Drag & drop GenBank files</p>
+                  <p className="text-sm text-muted-foreground">or</p>
+                  <Button variant="outline" className="mt-2" onClick={handleGbkBrowseClick}>
+                    Browse files
+                  </Button>
+                  <input
+                      type="file"
+                      ref={gbkFileInputRef}
+                      onChange={handleGbkFileSelect}
+                      accept=".gbk,.gb,.genbank"
+                      className="hidden"
+                      multiple
+                  />
+                </div>
+
+                {gbkFiles.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Uploaded Files ({gbkFiles.length})</Label>
+                      <div className="border rounded-md p-4 space-y-2">
+                        {gbkFiles.map((file, index) => (
+                            <div key={index} className="flex items-center justify-between bg-muted p-2 rounded-md">
+                              <span className="text-sm font-medium truncate">{file.name}</span>
+                              <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveGbkFile(index)}
+                                  className="h-8 w-8 p-0"
+                              >
+                                <X className="h-4 w-4"/>
+                              </Button>
+                            </div>
+                        ))}
+                      </div>
+                    </div>
+                )}
+
+                <Button
+                    onClick={handleBgcSearch}
+                    disabled={isBgcSearchLoading}
+                >
+                  {isBgcSearchLoading ? "Uploading..." : "Search with BGC"}
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <Separator className="my-8"/>
+
+          <div>
+            <h2 className="font-headline text-2xl font-bold">Results</h2>
+
+            {/* Job Status Display */}
+            {(sequenceJobId || bgcJobId) && (
+                <div className="mt-4 mb-6">
+                  <h3 className="font-semibold mb-2">Job Status</h3>
+
+                  {sequenceJobId && (
+                      <div className="bg-muted p-4 rounded-md mb-2">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <span className="font-medium">Sequence Search Job:</span> {sequenceJobId}
+                          </div>
+                          <div className="text-sm">
+                            Status: <span className={`font-semibold ${
+                              sequenceJobStatus === 'completed' ? 'text-green-600' :
+                                  sequenceJobStatus === 'failed' ? 'text-red-600' :
+                                      'text-amber-600'
+                          }`}>
                         {sequenceJobStatus || 'Pending'}
                       </span>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="w-full bg-gray-200 rounded-full h-2.5">
-                    <div 
-                      className="bg-primary h-2.5 rounded-full" 
-                      style={{ width: `${sequenceJobProgress}%` }}
-                    ></div>
-                  </div>
-
-                  {/* Queue statistics */}
-                  {sequenceQueueStats && (
-                    <div className="mt-2 text-sm grid grid-cols-2 gap-2">
-                      <div>
-                        <span className="font-medium">Total Jobs:</span> {sequenceQueueStats.totalJobs}
-                      </div>
-                      <div>
-                        <span className="font-medium">Running Jobs:</span> {sequenceQueueStats.activeJobs}
-                      </div>
-                      <div>
-                        <span className="font-medium">Queued Jobs:</span> {sequenceQueueStats.waitingJobs}
-                      </div>
-                      {sequenceQueueStats.queuePosition > 0 && (
-                        <div>
-                          <span className="font-medium">Queue Position:</span> {sequenceQueueStats.queuePosition}
+                          </div>
                         </div>
-                      )}
-                    </div>
+
+                        {/* Progress bar */}
+                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                          <div
+                              className="bg-primary h-2.5 rounded-full"
+                              style={{width: `${sequenceJobProgress}%`}}
+                          ></div>
+                        </div>
+
+                        {/* Queue position */}
+                        {sequenceQueueStats && sequenceQueueStats.queuePosition > 0 && (
+                            <div className="mt-2 text-sm">
+                              <span className="font-medium">Queue Position:</span> {sequenceQueueStats.queuePosition}
+                            </div>
+                        )}
+
+                        {isPollingSequenceJob && (
+                            <p className="text-xs text-muted-foreground mt-1">Waiting for results...</p>
+                        )}
+                      </div>
                   )}
 
-                  {isPollingSequenceJob && (
-                    <p className="text-xs text-muted-foreground mt-1">Waiting for results...</p>
-                  )}
-                </div>
-              )}
-
-              {bgcJobId && (
-                <div className="bg-muted p-4 rounded-md">
-                  <div className="flex justify-between items-center mb-2">
-                    <div>
-                      <span className="font-medium">BGC Search Job:</span> {bgcJobId}
-                    </div>
-                    <div className="text-sm">
-                      Status: <span className={`font-semibold ${
-                        bgcJobStatus === 'completed' ? 'text-green-600' : 
-                        bgcJobStatus === 'failed' ? 'text-red-600' : 
-                        'text-amber-600'
-                      }`}>
+                  {bgcJobId && (
+                      <div className="bg-muted p-4 rounded-md">
+                        <div className="flex justify-between items-center mb-2">
+                          <div>
+                            <span className="font-medium">BGC Search Job:</span> {bgcJobId}
+                          </div>
+                          <div className="text-sm">
+                            Status: <span className={`font-semibold ${
+                              bgcJobStatus === 'completed' ? 'text-green-600' :
+                                  bgcJobStatus === 'failed' ? 'text-red-600' :
+                                      'text-amber-600'
+                          }`}>
                         {bgcJobStatus || 'Pending'}
                       </span>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="w-full bg-gray-200 rounded-full h-2.5">
-                    <div 
-                      className="bg-primary h-2.5 rounded-full" 
-                      style={{ width: `${bgcJobProgress}%` }}
-                    ></div>
-                  </div>
-
-                  {/* Queue statistics */}
-                  {bgcQueueStats && (
-                    <div className="mt-2 text-sm grid grid-cols-2 gap-2">
-                      <div>
-                        <span className="font-medium">Total Jobs:</span> {bgcQueueStats.totalJobs}
-                      </div>
-                      <div>
-                        <span className="font-medium">Running Jobs:</span> {bgcQueueStats.activeJobs}
-                      </div>
-                      <div>
-                        <span className="font-medium">Queued Jobs:</span> {bgcQueueStats.waitingJobs}
-                      </div>
-                      {bgcQueueStats.queuePosition > 0 && (
-                        <div>
-                          <span className="font-medium">Queue Position:</span> {bgcQueueStats.queuePosition}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  )}
 
-                  {isPollingBgcJob && (
-                    <p className="text-xs text-muted-foreground mt-1">Waiting for results...</p>
+                        {/* Progress bar */}
+                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                          <div
+                              className="bg-primary h-2.5 rounded-full"
+                              style={{width: `${bgcJobProgress}%`}}
+                          ></div>
+                        </div>
+
+                        {/* Queue position */}
+                        {bgcQueueStats && bgcQueueStats.queuePosition > 0 && (
+                            <div className="mt-2 text-sm">
+                              <span className="font-medium">Queue Position:</span> {bgcQueueStats.queuePosition}
+                            </div>
+                        )}
+
+                        {isPollingBgcJob && (
+                            <p className="text-xs text-muted-foreground mt-1">Waiting for results...</p>
+                        )}
+                      </div>
                   )}
                 </div>
-              )}
-            </div>
-          )}
+            )}
 
-          <Tabs defaultValue="bgcs-results" className="mt-4">
-            <TabsList>
-              <TabsTrigger value="bgcs-results">BGCs</TabsTrigger>
-              <TabsTrigger value="gcfs-results">GCFs</TabsTrigger>
-              <TabsTrigger value="samples-results">Samples</TabsTrigger>
-              <TabsTrigger value="taxa-results">Taxa</TabsTrigger>
-            </TabsList>
+            <Tabs defaultValue="bgcs-results" className="mt-4">
+              <TabsList>
+                <TabsTrigger value="bgcs-results">BGCs</TabsTrigger>
+                <TabsTrigger value="gcfs-results">GCFs</TabsTrigger>
+                <TabsTrigger value="samples-results">Samples</TabsTrigger>
+                <TabsTrigger value="taxa-results">Taxa</TabsTrigger>
+              </TabsList>
 
             <TabsContent value="bgcs-results" className="mt-4">
               {(sequenceJobResults || bgcJobResults) ? (

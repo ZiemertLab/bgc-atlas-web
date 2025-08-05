@@ -1,20 +1,22 @@
+import Image from "next/image";
 import type { SVGProps } from "react";
 
 export const Icons = {
-  logo: (props: SVGProps<SVGSVGElement>) => (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M12 2L2 7l10 5 10-5-10-5z" />
-      <path d="M2 17l10 5 10-5" />
-      <path d="M2 12l10 5 10-5" />
-    </svg>
-  ),
+    logo: (props: SVGProps<SVGSVGElement>) => (
+        <Image
+            src="/bgc-atlas-logo.svg"
+            alt="BGC-Atlas Logo"
+            width={
+                typeof props.width === "number"
+                    ? props.width
+                    : Number(props.width) || 48   // fallback
+            }
+            height={
+                typeof props.height === "number"
+                    ? props.height
+                    : Number(props.height) || 48
+            }
+            className={props.className}
+        />
+    ),
 };

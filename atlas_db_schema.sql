@@ -336,41 +336,51 @@ GROUP BY
     b.id, b.lineage;
 
 
-CREATE MATERIALIZED VIEW unified_analyses_view AS
+CREATE MATERIALIZED VIEW unified_analyses_materialized AS
 SELECT
-    -- Analysis information
+    -- Analysis information (primary grouping)
     an.id AS analysis_id,
     an.accession AS analysis_accession,
     an.instrument_platform,
     bpa.bgc_count,
 
-    -- Sample information
-    s.id AS sample_id,
-    s.accession AS sample_accession,
-    s.biosample,
-    s.sample_name,
-    s.latitude,
-    s.longitude,
-    s.geo_loc_name,
-    s.environment_biome,
-    s.environment_feature,
-    s.environment_material,
-    s.host_tax_id,
-    s.species,
+    -- Sample information (aggregated into arrays)
+    array_agg(DISTINCT s.id) AS sample_ids,
+    array_agg(DISTINCT s.accession) AS sample_accessions,
+    array_agg(DISTINCT s.biosample) FILTER (WHERE s.biosample IS NOT NULL) AS biosamples,
+    array_agg(DISTINCT s.sample_name) FILTER (WHERE s.sample_name IS NOT NULL) AS sample_names,
 
-    -- Study information
-    st.id AS study_id,
-    st.accession AS study_accession,
-    st.bioproject,
-    st.study_name,
+    -- Geographic information (aggregated)
+    array_agg(DISTINCT s.latitude) FILTER (WHERE s.latitude IS NOT NULL) AS latitudes,
+    array_agg(DISTINCT s.longitude) FILTER (WHERE s.longitude IS NOT NULL) AS longitudes,
+    array_agg(DISTINCT s.geo_loc_name) FILTER (WHERE s.geo_loc_name IS NOT NULL) AS geo_loc_names,
 
-    -- Biome information
-    b.id AS biome_id,
-    b.lineage AS biome_lineage,
+    -- Environmental information (aggregated)
+    array_agg(DISTINCT s.environment_biome) FILTER (WHERE s.environment_biome IS NOT NULL) AS environment_biomes,
+    array_agg(DISTINCT s.environment_feature) FILTER (WHERE s.environment_feature IS NOT NULL) AS environment_features,
+    array_agg(DISTINCT s.environment_material) FILTER (WHERE s.environment_material IS NOT NULL) AS environment_materials,
 
-    -- Publications information
+    -- Host information (aggregated)
+    array_agg(DISTINCT s.host_tax_id) FILTER (WHERE s.host_tax_id IS NOT NULL) AS host_tax_ids,
+    array_agg(DISTINCT s.species) FILTER (WHERE s.species IS NOT NULL) AS species,
+
+    -- Study information (aggregated into arrays)
+    array_agg(DISTINCT st.id) AS study_ids,
+    array_agg(DISTINCT st.accession) AS study_accessions,
+    array_agg(DISTINCT st.bioproject) FILTER (WHERE st.bioproject IS NOT NULL) AS bioprojects,
+    array_agg(DISTINCT st.study_name) FILTER (WHERE st.study_name IS NOT NULL) AS study_names,
+
+    -- Biome information (aggregated into arrays)
+    array_agg(DISTINCT b.id) FILTER (WHERE b.id IS NOT NULL) AS biome_ids,
+    array_agg(DISTINCT b.lineage) FILTER (WHERE b.lineage IS NOT NULL) AS biome_lineages,
+
+    -- Publications information (already aggregated in original view)
     STRING_AGG(DISTINCT p.doi, ', ') AS publications,
-    STRING_AGG(DISTINCT CONCAT(p.title, ' (', p.doi, ')'), '; ') AS study_publications
+    STRING_AGG(DISTINCT CONCAT(p.title, ' (', p.doi, ')'), '; ') AS study_publications,
+
+    -- Alternatively, you can use array_agg for publications too
+    array_agg(DISTINCT p.doi) FILTER (WHERE p.doi IS NOT NULL) AS publication_dois,
+    array_agg(DISTINCT p.title) FILTER (WHERE p.title IS NOT NULL) AS publication_titles
 FROM
     analyses an
         JOIN bgcs_per_analysis bpa ON an.id = bpa.analysis_id
@@ -387,9 +397,89 @@ FROM
         LEFT JOIN study_publications sp ON st.id = sp.study_id
         LEFT JOIN publications p ON sp.publication_id = p.id
 GROUP BY
-    an.id, an.accession, an.instrument_platform, bpa.bgc_count,
-    s.id, s.accession, s.biosample, s.sample_name, s.latitude, s.longitude,
-    s.geo_loc_name, s.environment_biome, s.environment_feature, s.environment_material,
-    s.host_tax_id, s.species,
-    st.id, st.accession, st.bioproject, st.study_name,
-    b.id, b.lineage;
+    an.id, an.accession, an.instrument_platform, bpa.bgc_count;
+
+
+CREATE UNIQUE INDEX idx_unified_analyses_analysis_id ON unified_analyses_materialized(analysis_id);
+
+CREATE INDEX idx_unified_analyses_accession ON unified_analyses_materialized(analysis_accession);
+CREATE INDEX idx_unified_analyses_platform ON unified_analyses_materialized(instrument_platform);
+CREATE INDEX idx_unified_analyses_bgc_count ON unified_analyses_materialized(bgc_count);
+
+CREATE INDEX idx_unified_analyses_geo ON unified_analyses_materialized USING GIN(latitudes, longitudes);
+CREATE INDEX idx_unified_analyses_biomes ON unified_analyses_materialized USING GIN(environment_biomes);
+CREATE INDEX idx_unified_analyses_biome_ids ON unified_analyses_materialized USING GIN(biome_ids);
+
+CREATE INDEX idx_unified_analyses_study_ids ON unified_analyses_materialized USING GIN(study_ids);
+CREATE INDEX idx_unified_analyses_study_accessions ON unified_analyses_materialized USING GIN(study_accessions);
+
+CREATE INDEX idx_unified_analyses_sample_ids ON unified_analyses_materialized USING GIN(sample_ids);
+CREATE INDEX idx_unified_analyses_sample_accessions ON unified_analyses_materialized USING GIN(sample_accessions);
+
+CREATE INDEX idx_unified_analyses_publications ON unified_analyses_materialized USING GIN(publication_dois);
+
+
+CREATE MATERIALIZED VIEW bgc_biome_analysis_mapping AS
+SELECT DISTINCT
+    -- BGC information
+    bgc.id AS bgc_id,
+    bgc.filename AS bgc_filename,
+    bgc.product_class,
+    bgc.product_type,
+    bgc.anchor,
+    bgc.gcf_id,
+    bgc.gcf_membership,
+
+    -- Analysis information (may be NULL)
+    an.id AS analysis_id,
+    an.accession AS analysis_accession,
+    an.instrument_platform,
+    an.pipeline_version,
+
+    -- Assembly information
+    a.id AS assembly_id,
+    a.accession AS assembly_accession,
+
+    -- Sample information (may be NULL)
+    (array_agg(DISTINCT s.id) FILTER (WHERE s.id IS NOT NULL))[1] AS sample_id,
+    (array_agg(DISTINCT s.accession) FILTER (WHERE s.accession IS NOT NULL))[1] AS sample_accession,
+    (array_agg(DISTINCT s.latitude) FILTER (WHERE s.latitude IS NOT NULL))[1] AS latitude,
+    (array_agg(DISTINCT s.longitude) FILTER (WHERE s.longitude IS NOT NULL))[1] AS longitude,
+    (array_agg(DISTINCT s.geo_loc_name) FILTER (WHERE s.geo_loc_name IS NOT NULL))[1] AS geo_loc_name,
+    (array_agg(DISTINCT s.environment_biome) FILTER (WHERE s.environment_biome IS NOT NULL))[1] AS environment_biome,
+    (array_agg(DISTINCT s.environment_feature) FILTER (WHERE s.environment_feature IS NOT NULL))[1] AS environment_feature,
+    (array_agg(DISTINCT s.environment_material) FILTER (WHERE s.environment_material IS NOT NULL))[1] AS environment_material,
+
+    -- Biome information (may be NULL)
+    (array_agg(DISTINCT b.id) FILTER (WHERE b.id IS NOT NULL))[1] AS biome_id,
+    (array_agg(DISTINCT b.lineage) FILTER (WHERE b.lineage IS NOT NULL))[1] AS biome_lineage,
+
+    -- Study information (may be NULL)
+    (array_agg(DISTINCT st.id) FILTER (WHERE st.id IS NOT NULL))[1] AS study_id,
+    (array_agg(DISTINCT st.accession) FILTER (WHERE st.accession IS NOT NULL))[1] AS study_accession,
+    (array_agg(DISTINCT st.study_name) FILTER (WHERE st.study_name IS NOT NULL))[1] AS study_name
+
+FROM bgcs bgc
+         JOIN assemblies a ON bgc.assembly = a.id  -- Keep this as INNER JOIN
+         LEFT JOIN assembly_analyses aa ON a.id = aa.assembly_id  -- Changed to LEFT JOIN
+         LEFT JOIN analyses an ON aa.analysis_id = an.id  -- Changed to LEFT JOIN
+         LEFT JOIN run_assemblies ra ON a.id = ra.assembly_id  -- Changed to LEFT JOIN
+         LEFT JOIN runs r ON ra.run_id = r.id  -- Changed to LEFT JOIN
+         LEFT JOIN sample_runs sr ON r.id = sr.run_id  -- Changed to LEFT JOIN
+         LEFT JOIN samples s ON sr.sample_id = s.id  -- Changed to LEFT JOIN
+         LEFT JOIN study_samples ss ON s.id = ss.sample_id  -- Already LEFT JOIN
+         LEFT JOIN studies st ON ss.study_id = st.id  -- Changed to LEFT JOIN
+         LEFT JOIN sample_biomes sb ON s.id = sb.sample_id  -- Already LEFT JOIN
+         LEFT JOIN biomes b ON sb.biome_id = b.id  -- Already LEFT JOIN
+GROUP BY
+    bgc.id, bgc.filename, bgc.product_class, bgc.product_type, bgc.anchor, bgc.gcf_id, bgc.gcf_membership,
+    an.id, an.accession, an.instrument_platform, an.pipeline_version,
+    a.id, a.accession;
+
+-- Recreate indexes (note: unique index on bgc_id, analysis_id won't work if analysis_id can be NULL)
+CREATE INDEX idx_bgc_biome_analysis_bgc_id ON bgc_biome_analysis_mapping(bgc_id);
+CREATE INDEX idx_bgc_biome_analysis_analysis_id ON bgc_biome_analysis_mapping(analysis_id);
+CREATE INDEX idx_bgc_biome_analysis_biome_id ON bgc_biome_analysis_mapping(biome_id);
+CREATE INDEX idx_bgc_biome_analysis_product_class ON bgc_biome_analysis_mapping USING GIN(product_class);
+CREATE INDEX idx_bgc_biome_analysis_product_type ON bgc_biome_analysis_mapping USING GIN(product_type);
+CREATE INDEX idx_bgc_biome_analysis_gcf_id ON bgc_biome_analysis_mapping(gcf_id);

@@ -32,7 +32,19 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage: storage });
+// Get upload limits from environment variables
+const maxFiles = parseInt(process.env.MAX_UPLOAD_FILES || '50');
+const maxSizeMB = parseInt(process.env.MAX_UPLOAD_SIZE_MB || '250');
+const maxSizeBytes = maxSizeMB * 1024 * 1024;
+
+// Configure multer with limits
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: maxSizeBytes,
+    files: maxFiles
+  }
+});
 
 // Stats endpoints
 router.get('/stats/kpi', async (req, res) => {
@@ -752,15 +764,21 @@ router.get('/browse/analyses', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
-    const sortColumn = req.query.sortColumn || 'id';
+    const sortColumn = req.query.sortColumn || 'analysis_id';
     const sortDirection = req.query.sortDirection || 'asc';
     const filters = req.query.filters ? JSON.parse(req.query.filters) : {};
 
     // Validate sort parameters to prevent SQL injection
-    const validColumns = ['id', 'accession', 'bgc_count', 'experiment_type', 'pipeline_version', 'analysis_status', 'submit_time', 'complete_time', 'instrument_platform', 'instrument_model'];
+    const validColumns = [
+      'analysis_id', 'analysis_accession', 'instrument_platform', 'bgc_count',
+      'sample_ids', 'sample_accessions', 'biosamples', 'sample_names', 'latitudes', 'longitudes',
+      'geo_loc_names', 'environment_biomes', 'environment_features', 'environment_materials',
+      'host_tax_ids', 'species', 'study_ids', 'study_accessions', 'bioprojects', 'study_names',
+      'biome_ids', 'biome_lineages', 'publication_dois', 'publication_titles'
+    ];
     const validDirections = ['asc', 'desc'];
 
-    const column = validColumns.includes(sortColumn) ? sortColumn : 'id';
+    const column = validColumns.includes(sortColumn) ? sortColumn : 'analysis_id';
     const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc';
 
     // Build WHERE clause based on filters
@@ -772,51 +790,69 @@ router.get('/browse/analyses', async (req, res) => {
       whereClause = 'WHERE ';
       const conditions = [];
 
-      if (filters.id) {
-        conditions.push(`a.id ILIKE $${paramIndex}`);
-        queryParams.push(`%${filters.id}%`);
+      if (filters.id || filters.analysis_id) {
+        conditions.push(`analysis_id ILIKE $${paramIndex}`);
+        queryParams.push(`%${filters.id || filters.analysis_id}%`);
         paramIndex++;
       }
 
-      if (filters.accession) {
-        conditions.push(`a.accession ILIKE $${paramIndex}`);
-        queryParams.push(`%${filters.accession}%`);
-        paramIndex++;
-      }
-
-      if (filters.experiment_type) {
-        conditions.push(`a.experiment_type ILIKE $${paramIndex}`);
-        queryParams.push(`%${filters.experiment_type}%`);
-        paramIndex++;
-      }
-
-      if (filters.pipeline_version) {
-        conditions.push(`a.pipeline_version ILIKE $${paramIndex}`);
-        queryParams.push(`%${filters.pipeline_version}%`);
-        paramIndex++;
-      }
-
-      if (filters.analysis_status) {
-        conditions.push(`a.analysis_status ILIKE $${paramIndex}`);
-        queryParams.push(`%${filters.analysis_status}%`);
+      if (filters.accession || filters.analysis_accession) {
+        conditions.push(`analysis_accession ILIKE $${paramIndex}`);
+        queryParams.push(`%${filters.accession || filters.analysis_accession}%`);
         paramIndex++;
       }
 
       if (filters.instrument_platform) {
-        conditions.push(`a.instrument_platform ILIKE $${paramIndex}`);
+        conditions.push(`instrument_platform ILIKE $${paramIndex}`);
         queryParams.push(`%${filters.instrument_platform}%`);
         paramIndex++;
       }
 
-      if (filters.instrument_model) {
-        conditions.push(`a.instrument_model ILIKE $${paramIndex}`);
-        queryParams.push(`%${filters.instrument_model}%`);
+      if (filters.bgc_count !== undefined) {
+        conditions.push(`bgc_count = $${paramIndex}`);
+        queryParams.push(parseInt(filters.bgc_count));
         paramIndex++;
       }
 
-      if (filters.bgc_count !== undefined) {
-        conditions.push(`COALESCE(bpa.bgc_count, 0) = $${paramIndex}`);
-        queryParams.push(parseInt(filters.bgc_count));
+      if (filters.sample_accession) {
+        conditions.push(`EXISTS (SELECT 1 FROM unnest(sample_accessions) as sa WHERE sa ILIKE $${paramIndex})`);
+        queryParams.push(`%${filters.sample_accession}%`);
+        paramIndex++;
+      }
+
+      if (filters.biosample) {
+        conditions.push(`EXISTS (SELECT 1 FROM unnest(biosamples) as bs WHERE bs ILIKE $${paramIndex})`);
+        queryParams.push(`%${filters.biosample}%`);
+        paramIndex++;
+      }
+
+      if (filters.sample_name) {
+        conditions.push(`EXISTS (SELECT 1 FROM unnest(sample_names) as sn WHERE sn ILIKE $${paramIndex})`);
+        queryParams.push(`%${filters.sample_name}%`);
+        paramIndex++;
+      }
+
+      if (filters.environment_biome) {
+        conditions.push(`EXISTS (SELECT 1 FROM unnest(environment_biomes) as eb WHERE eb ILIKE $${paramIndex})`);
+        queryParams.push(`%${filters.environment_biome}%`);
+        paramIndex++;
+      }
+
+      if (filters.study_accession) {
+        conditions.push(`EXISTS (SELECT 1 FROM unnest(study_accessions) as sa WHERE sa ILIKE $${paramIndex})`);
+        queryParams.push(`%${filters.study_accession}%`);
+        paramIndex++;
+      }
+
+      if (filters.bioproject) {
+        conditions.push(`EXISTS (SELECT 1 FROM unnest(bioprojects) as bp WHERE bp ILIKE $${paramIndex})`);
+        queryParams.push(`%${filters.bioproject}%`);
+        paramIndex++;
+      }
+
+      if (filters.study_name) {
+        conditions.push(`EXISTS (SELECT 1 FROM unnest(study_names) as sn WHERE sn ILIKE $${paramIndex})`);
+        queryParams.push(`%${filters.study_name}%`);
         paramIndex++;
       }
 
@@ -828,21 +864,19 @@ router.get('/browse/analyses', async (req, res) => {
       }
     }
 
-    // Get analyses with pagination and BGC count
+    // Get analyses with pagination from the unified materialized view
     const analysesResult = await db.query(`
-      SELECT a.*, COALESCE(bpa.bgc_count, 0) as bgc_count
-      FROM analyses a
-      LEFT JOIN bgcs_per_analysis bpa ON a.id = bpa.analysis_id
+      SELECT *
+      FROM unified_analyses_materialized
       ${whereClause}
-      ORDER BY ${column === 'bgc_count' ? 'COALESCE(bpa.bgc_count, 0)' : `a.${column}`} ${direction}
+      ORDER BY ${column} ${direction}
       LIMIT $1 OFFSET $2
     `, queryParams);
 
     // Get total count with filters
     let countQuery = `
       SELECT COUNT(*) 
-      FROM analyses a
-      LEFT JOIN bgcs_per_analysis bpa ON a.id = bpa.analysis_id
+      FROM unified_analyses_materialized
     `;
     if (whereClause) {
       countQuery += ' ' + whereClause;
@@ -862,11 +896,38 @@ router.get('/browse/analyses', async (req, res) => {
   }
 });
 
-// Import the queue
-const { searchQueue } = require('../queue');
+// Import the queue and the updateQueueStatsInRedis function
+const { searchQueue, updateQueueStatsInRedis } = require('../queue');
+
+// Using the updateQueueStatsInRedis function imported from the queue module
+
+// Error handler middleware for multer errors
+const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ 
+        error: `File size limit exceeded. Maximum file size is ${maxSizeMB} MB.` 
+      });
+    }
+    if (err.code === 'LIMIT_FILE_COUNT') {
+      return res.status(413).json({ 
+        error: `Too many files. Maximum number of files is ${maxFiles}.` 
+      });
+    }
+    return res.status(400).json({ error: `Upload error: ${err.message}` });
+  }
+  next(err);
+};
 
 // Sequence Search endpoint
-router.post('/search/sequence', upload.array('files'), async (req, res) => {
+router.post('/search/sequence', (req, res, next) => {
+  upload.array('files')(req, res, (err) => {
+    if (err) {
+      return handleMulterError(err, req, res, next);
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     // Files are uploaded to req.sessionDir with UUID req.sessionId
     const jobData = {
@@ -892,6 +953,10 @@ router.post('/search/sequence', upload.array('files'), async (req, res) => {
       }
     });
 
+    // Update queue statistics in Redis
+    await updateQueueStatsInRedis('sequence');
+    await updateQueueStatsInRedis(); // Update all stats
+
     // Return the job ID and session ID to the client
     res.json({
       success: true,
@@ -911,7 +976,14 @@ router.post('/search/sequence', upload.array('files'), async (req, res) => {
 });
 
 // BGC Search endpoint
-router.post('/search/bgc', upload.array('files'), async (req, res) => {
+router.post('/search/bgc', (req, res, next) => {
+  upload.array('files')(req, res, (err) => {
+    if (err) {
+      return handleMulterError(err, req, res, next);
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     // Files are uploaded to req.sessionDir with UUID req.sessionId
     const jobData = {
@@ -936,6 +1008,10 @@ router.post('/search/bgc', upload.array('files'), async (req, res) => {
         delay: 1000
       }
     });
+
+    // Update queue statistics in Redis
+    await updateQueueStatsInRedis('bgc');
+    await updateQueueStatsInRedis(); // Update all stats
 
     // Return the job ID and session ID to the client
     res.json({
@@ -980,10 +1056,44 @@ router.get('/search/status/:jobId', async (req, res) => {
       result = await job.finished();
     }
 
-    // Get all jobs from the queue
-    const waitingJobs = await searchQueue.getWaitingCount();
-    const activeJobs = await searchQueue.getActiveCount();
-    const totalJobs = waitingJobs + activeJobs;
+    // Create a Redis connection
+    const Redis = require('ioredis');
+    const redis = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD || undefined,
+    });
+
+    // Create a cache key based on the job type
+    const cacheKey = type ? `queue-stats:${type}` : 'queue-stats:all';
+
+    // Try to get queue stats from Redis
+    let queueStats = null;
+    const cachedData = await redis.get(cacheKey);
+
+    if (cachedData) {
+      // Use stats from Redis
+      console.log('Using queue statistics from Redis cache');
+      queueStats = JSON.parse(cachedData).queueStats;
+    } else {
+      // If not in Redis, update Redis and get fresh stats
+      console.log('Updating queue statistics in Redis');
+      await updateQueueStatsInRedis(type);
+      const freshData = await redis.get(cacheKey);
+      if (freshData) {
+        queueStats = JSON.parse(freshData).queueStats;
+      } else {
+        // Fallback to direct calculation if Redis fails
+        const waitingJobs = await searchQueue.getWaitingCount();
+        const activeJobs = await searchQueue.getActiveCount();
+        const totalJobs = waitingJobs + activeJobs;
+        queueStats = {
+          totalJobs,
+          activeJobs,
+          waitingJobs
+        };
+      }
+    }
 
     // Get queue position of the job
     let queuePosition = 0;
@@ -994,18 +1104,18 @@ router.get('/search/status/:jobId', async (req, res) => {
       queuePosition = waitingJobsData.findIndex(waitingJob => waitingJob.id === jobId) + 1;
     }
 
+    // Add queue position to the stats
+    queueStats.queuePosition = queuePosition;
+
+    redis.quit();
+
     res.json({
       jobId,
       type,
       state,
       progress,
       result,
-      queueStats: {
-        totalJobs,
-        activeJobs,
-        waitingJobs,
-        queuePosition
-      }
+      queueStats
     });
   } catch (error) {
     console.error('Error getting job status:', error);
@@ -1115,32 +1225,66 @@ router.get('/map/sample-locations', async (req, res) => {
 router.get('/search/queue-stats', async (req, res) => {
   try {
     const { type } = req.query;
+    console.log(`[DEBUG] Queue stats request received for type: ${type || 'all'}`);
 
     // Validate the search type if provided
     if (type && type !== 'sequence' && type !== 'bgc') {
+      console.log(`[DEBUG] Invalid search type: ${type}`);
       return res.status(400).json({ error: 'Invalid search type. Must be "sequence" or "bgc".' });
     }
 
-    // Get all jobs from the queue
-    const allJobs = await searchQueue.getJobs(['waiting', 'active']);
-
-    // Filter jobs by type if requested
-    const filteredJobs = type 
-      ? allJobs.filter(job => job.data.type === type)
-      : allJobs;
-
-    // Count active and waiting jobs
-    const activeJobs = filteredJobs.filter(job => job._state === 'active').length;
-    const waitingJobs = filteredJobs.filter(job => job._state === 'waiting').length;
-    const totalJobs = activeJobs + waitingJobs;
-
-    res.json({
-      queueStats: {
-        totalJobs,
-        activeJobs,
-        waitingJobs
-      }
+    // Create a Redis connection
+    const Redis = require('ioredis');
+    const redis = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD || undefined,
     });
+
+    // Create a cache key based on the type parameter
+    const cacheKey = type ? `queue-stats:${type}` : 'queue-stats:all';
+    console.log(`[DEBUG] Using Redis cache key: ${cacheKey}`);
+
+    // Try to get data from cache first
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+      console.log(`[DEBUG] Found data in Redis cache: ${cachedData}`);
+      const parsedData = JSON.parse(cachedData);
+      console.log(`[DEBUG] Parsed data from Redis: ${JSON.stringify(parsedData)}`);
+      redis.quit();
+      return res.json(parsedData);
+    } else {
+      console.log(`[DEBUG] No data found in Redis for key: ${cacheKey}`);
+    }
+
+    // If not in cache, update Redis and get fresh stats
+    console.log('[DEBUG] Updating queue statistics in Redis');
+    const queueStats = await updateQueueStatsInRedis(type);
+    console.log(`[DEBUG] Queue stats from updateQueueStatsInRedis: ${JSON.stringify(queueStats)}`);
+
+    // Get the updated data from Redis
+    const freshData = await redis.get(cacheKey);
+    console.log(`[DEBUG] Fresh data from Redis: ${freshData}`);
+    redis.quit();
+
+    if (freshData) {
+      const parsedFreshData = JSON.parse(freshData);
+      console.log(`[DEBUG] Parsed fresh data: ${JSON.stringify(parsedFreshData)}`);
+      return res.json(parsedFreshData);
+    } else {
+      console.log(`[DEBUG] No fresh data found in Redis after update for key: ${cacheKey}`);
+    }
+
+    // Fallback response if Redis fails
+    const fallbackResponse = {
+      queueStats: queueStats || {
+        totalJobs: 0,
+        activeJobs: 0,
+        waitingJobs: 0
+      }
+    };
+    console.log(`[DEBUG] Using fallback response: ${JSON.stringify(fallbackResponse)}`);
+    res.json(fallbackResponse);
   } catch (error) {
     console.error('Error getting queue statistics:', error);
     res.status(500).json({ error: 'Internal server error' });

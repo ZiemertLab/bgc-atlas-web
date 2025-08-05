@@ -8,6 +8,39 @@ const api = axios.create({
   },
 });
 
+console.log("[DEBUG_LOG] API: Axios instance created with baseURL:", process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api');
+
+// Add request interceptor for logging
+api.interceptors.request.use(
+  (config) => {
+    console.log("[DEBUG_LOG] API: Making request to:", config.url, "with params:", config.params);
+    return config;
+  },
+  (error) => {
+    console.error("[DEBUG_LOG] API: Request error:", error);
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor for logging
+api.interceptors.response.use(
+  (response) => {
+    console.log("[DEBUG_LOG] API: Response received from:", response.config.url, "status:", response.status);
+    console.log("[DEBUG_LOG] API: Response data:", response.data);
+    return response;
+  },
+  (error) => {
+    console.error("[DEBUG_LOG] API: Response error:", {
+      url: error.config?.url,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      message: error.message,
+      data: error.response?.data
+    });
+    return Promise.reject(error);
+  }
+);
+
 // Stats API
 export const getKpiData = async () => {
   const response = await api.get('/stats/kpi');
