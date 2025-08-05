@@ -303,15 +303,13 @@ export function BrowseClient() {
               key: "id",
               label: "ID",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' }
+              filterable: false
             },
             {
               key: "product_class",
               label: "Product Class",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => {
                 const text = Array.isArray(row.product_class) ? row.product_class.join(', ') : row.product_class;
                 return <TruncatedText text={text} />;
@@ -321,15 +319,13 @@ export function BrowseClient() {
               key: "assembly_accession",
               label: "Assembly",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' }
+              filterable: false
             },
             {
               key: "contig",
               label: "Location",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => `${row.contig}:${row.start}-${row.end_pos}`
             }
           ]}
@@ -358,8 +354,7 @@ export function BrowseClient() {
               key: "id",
               label: "GCF ID",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' }
+              filterable: false
             },
             {
               key: "bgc_count",
@@ -395,8 +390,7 @@ export function BrowseClient() {
               key: "analysis_id",
               label: "Analysis ID",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' }
+              filterable: false
             },
             {
               key: "bgc_count",
@@ -432,8 +426,7 @@ export function BrowseClient() {
               key: "geo_loc_names",
               label: "Geographic Location",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => {
                 const text = row.geo_loc_names && row.geo_loc_names.length > 0 ? row.geo_loc_names.join(', ') : 'N/A';
                 return <TruncatedText text={text} />;
@@ -443,16 +436,14 @@ export function BrowseClient() {
               key: "instrument_platform",
               label: "Instrument Platform",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => row.instrument_platform || 'N/A'
             },
             {
               key: "sample_names",
               label: "Sample Name",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => {
                 const text = row.sample_names && row.sample_names.length > 0 ? row.sample_names.join(', ') : 'N/A';
                 return <TruncatedText text={text} />;
@@ -462,8 +453,7 @@ export function BrowseClient() {
               key: "biosamples",
               label: "Biosample",
               sortable: true,
-              filterable: true,
-              filter: { type: 'text' },
+              filterable: false,
               render: (row) => {
                 const text = row.biosamples && row.biosamples.length > 0 ? row.biosamples.join(', ') : 'N/A';
                 return <TruncatedText text={text} />;
@@ -798,19 +788,16 @@ export function BrowseClient() {
                   <DataTable
                     columns={[
                       {
-                        key: "id",
-                        label: "ID",
-                        sortable: true,
-                        filterable: true,
-                        filter: { type: 'text' }
-                      },
-                      {
                         key: "lineage",
                         label: "Lineage",
                         sortable: true,
                         filterable: true,
                         filter: { type: 'text' },
-                        render: (row) => <TruncatedText text={row.lineage || 'N/A'} />
+                        render: (row) => {
+                          const lineage = row.lineage || 'N/A';
+                          const displayText = lineage.startsWith('root:') ? lineage.substring(5) : lineage;
+                          return <TruncatedText text={displayText} />;
+                        }
                       },
                       {
                         key: "bgc_count",

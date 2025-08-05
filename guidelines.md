@@ -1,4 +1,16 @@
 
+# Development Rules and Conventions
+
+## Junie Rules
+
+### Testing Policy
+**IMPORTANT**:
+- Do not run any test commands locally (`npm test`, `jest`, `playwright`, etc.)
+- Do not create test files or test directories
+- All testing must be performed on the remote server environment only
+- If you accidentally run a test command, ignore the results completely
+---
+
 # Separating Frontend and Backend Components with Express, Node.js, and Prisma
 
 Based on the project structure, you have a Next.js application that needs to be separated into frontend and backend components, with the backend migrated to Express, Node.js, and Prisma. Here's a step-by-step guide to achieve this:
@@ -442,10 +454,5 @@ volumes:
     - Implement rate limiting
     - Use HTTPS in production
     - Set proper CORS policies
-
-5. **Testing**:
-    - Write unit tests for API endpoints
-    - Create integration tests for database operations
-    - Set up end-to-end tests for critical flows
 
 By following these steps, you'll have a clean separation between your frontend and backend, with the backend using Express, Node.js, and Prisma for database operations. This architecture will be more maintainable and scalable for your BGC-Atlas application.
