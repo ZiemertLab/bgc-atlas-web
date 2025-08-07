@@ -484,3 +484,5 @@ CREATE INDEX idx_bgc_biome_analysis_biome_id ON bgc_biome_analysis_mapping(biome
 CREATE INDEX idx_bgc_biome_analysis_product_class ON bgc_biome_analysis_mapping USING GIN(product_class);
 CREATE INDEX idx_bgc_biome_analysis_product_type ON bgc_biome_analysis_mapping USING GIN(product_type);
 CREATE INDEX idx_bgc_biome_analysis_gcf_id ON bgc_biome_analysis_mapping(gcf_id);
+
+

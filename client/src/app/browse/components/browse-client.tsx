@@ -538,7 +538,14 @@ export function BrowseClient() {
               sortable: true,
               filterable: false,
               render: (row) => {
-                const text = row.biome_lineages && row.biome_lineages.length > 0 ? row.biome_lineages.join(', ') : 'N/A';
+                let text = 'N/A';
+                if (row.biome_lineages && row.biome_lineages.length > 0) {
+                  // Remove "root:" prefix from each biome lineage
+                  const cleanedLineages = row.biome_lineages.map((lineage) => 
+                    lineage.startsWith('root:') ? lineage.substring(5) : lineage
+                  );
+                  text = cleanedLineages.join(', ');
+                }
                 return <TruncatedText text={text} />;
               }
             },

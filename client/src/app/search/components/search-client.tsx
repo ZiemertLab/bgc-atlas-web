@@ -359,7 +359,7 @@ export function SearchClient() {
   const handleJobUuidSearch = async (providedUuid?: string) => {
     const uuidToUse = providedUuid || jobUuid;
 
-    if (!uuidToUse.trim()) {
+    if (!uuidToUse || typeof uuidToUse !== 'string' || !uuidToUse.trim()) {
       toast({
         title: "No UUID provided",
         description: "Please enter a job UUID to search.",
