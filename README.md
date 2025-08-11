@@ -1,3 +1,4 @@
+
 # BGC Atlas
 
 [![DOI](https://zenodo.org/badge/842928932.svg)](https://doi.org/10.5281/zenodo.13903805)
@@ -117,16 +118,6 @@ BGC Atlas is built with the following main dependencies:
 
 For a complete list of dependencies, see the `package.json` file.
 
-## Running Tests
-
-Automated tests are written with [Jest](https://jestjs.io/). Ensure Node.js 18 or later is installed and run `npm install` to install dev dependencies. Then execute:
-
-```
-npm test
-```
-
-This command runs all test suites in the `tests` directory.
-
 ## Frontend Components
 
 The user interface is built with Pug templates. Reusable pieces of markup live in the `views/components` directory as mixins. Core elements such as the navigation bar and footer are defined once and included across all pages. Additional components, like a generic card, can be composed to simplify future UI work.
@@ -147,11 +138,103 @@ The current version of BGC Atlas includes:
 ## Contributing
 
 Contributions to BGC Atlas are welcome! Please feel free to submit a Pull Request.
-
 ## License
-
+1. Create the database and schema by running the SQL script:
 This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Contact
 
 For any questions or feedback, please contact us at [caner.bagci@uni-tuebingen.de](mailto:caner.bagci@uni-tuebingen.de).
+```bash
+psql -U postgres -f atlas_db_schema.sql
+```
+
+2. Load the dummy data into the database:
+
+```bash
+psql -U postgres -d atlas_v2025 -f atlas_dummy_data.sql
+```
+
+## Server Setup
+
+1. Navigate to the server directory:
+
+```bash
+cd server
+```
+
+2. Install dependencies:
+
+```bash
+npm install
+```
+
+3. Create a `.env` file in the server directory with the following content (adjust as needed):
+
+```
+# Database configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=atlas_v2025
+DB_USER=postgres
+DB_PASSWORD=postgres
+
+# Server configuration
+PORT=3000
+```
+
+4. Start the server:
+
+```bash
+npm run dev
+```
+
+The server will be running at http://localhost:3000.
+
+## Client Setup
+
+1. Navigate to the client directory:
+
+```bash
+cd client
+```
+
+2. Install dependencies:
+
+```bash
+npm install
+```
+
+3. Create a `.env.local` file in the client directory with the following content:
+
+```
+NEXT_PUBLIC_API_URL=http://localhost:3000/api
+```
+
+4. Start the client:
+
+```bash
+npm run dev
+```
+
+The client will be running at http://localhost:3001.
+
+## API Endpoints
+
+The following API endpoints are available:
+
+### Stats Endpoints
+
+- `GET /api/stats/kpi` - Get key performance indicators (counts of studies, samples, runs, assemblies)
+- `GET /api/stats/bgc-classes` - Get BGC class distribution
+
+### Browse Endpoints
+
+- `GET /api/browse/studies` - Browse studies with pagination
+- `GET /api/browse/samples` - Browse samples with pagination
+- `GET /api/browse/runs` - Browse runs with pagination
+- `GET /api/browse/biomes` - Browse biomes with pagination
+
+All browse endpoints support pagination with `page` and `limit` query parameters.
+
+Example: `GET /api/browse/studies?page=1&limit=100`
