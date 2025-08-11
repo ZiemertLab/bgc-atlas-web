@@ -126,6 +126,166 @@ router.get('/stats/bgc-classes', async (req, res) => {
 });
 
 
+// Helper function to build WHERE clauses from filters
+function buildFilterWhereClause(filters, tableAlias = '') {
+  if (!filters || filters.length === 0) {
+    return { whereClause: '', params: [] };
+  }
+
+  const conditions = [];
+  const params = [];
+  let paramIndex = 1;
+
+  filters.forEach(filter => {
+    const { key, value, type } = filter;
+    const columnName = tableAlias ? `${tableAlias}.${key}` : key;
+
+    switch (type) {
+      case 'text':
+        if (value && value.trim()) {
+          conditions.push(`${columnName} ILIKE $${paramIndex}`);
+          params.push(`%${value.trim()}%`);
+          paramIndex++;
+        }
+        break;
+
+      case 'range':
+        if (value && (value.min || value.max)) {
+          if (value.min) {
+            conditions.push(`${columnName} >= $${paramIndex}`);
+            params.push(parseFloat(value.min));
+            paramIndex++;
+          }
+          if (value.max) {
+            conditions.push(`${columnName} <= $${paramIndex}`);
+            params.push(parseFloat(value.max));
+            paramIndex++;
+          }
+        }
+        break;
+
+      case 'select':
+        if (value) {
+          conditions.push(`${columnName} = $${paramIndex}`);
+          params.push(value);
+          paramIndex++;
+        }
+        break;
+
+      case 'multiselect':
+        if (value && Array.isArray(value) && value.length > 0) {
+          // For array columns, use && operator to check if arrays overlap
+          if (key === 'product_class' || key === 'product_type') {
+            conditions.push(`${columnName} && $${paramIndex}`);
+            params.push(value);
+          } else {
+            // For regular columns, use IN clause
+            const placeholders = value.map(() => `$${paramIndex++}`).join(',');
+            paramIndex -= value.length; // Reset for actual assignment
+            conditions.push(`${columnName} IN (${placeholders})`);
+            value.forEach(v => {
+              params.push(v);
+              paramIndex++;
+            });
+          }
+        }
+        break;
+
+      case 'boolean':
+        if (value !== null && value !== undefined) {
+          conditions.push(`${columnName} = $${paramIndex}`);
+          params.push(value);
+          paramIndex++;
+        }
+        break;
+
+      case 'date':
+        if (value && (value.from || value.to)) {
+          if (value.from) {
+            conditions.push(`${columnName} >= $${paramIndex}`);
+            params.push(value.from);
+            paramIndex++;
+          }
+          if (value.to) {
+            conditions.push(`${columnName} <= $${paramIndex}`);
+            params.push(value.to);
+            paramIndex++;
+          }
+        }
+        break;
+    }
+  });
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  return { whereClause, params };
+}
+
+// Parse filters from query parameters
+function parseFilters(query) {
+  const filters = [];
+  
+  // Check if filters are passed as a JSON string
+  if (query.filters) {
+    try {
+      const parsedFilters = JSON.parse(query.filters);
+      return parsedFilters.map(filter => ({
+        ...filter,
+        type: getFilterType(filter.key)
+      }));
+    } catch (e) {
+      console.error('Error parsing filters:', e);
+    }
+  }
+
+  return filters;
+}
+
+// Get filter type based on filter key
+function getFilterType(key) {
+  const filterTypes = {
+    // Text filters
+    'analysis_id': 'text',
+    'accession': 'text',
+    'study_name': 'text',
+    'bioproject': 'text',
+    'sample_names': 'text',
+    'biosamples': 'text',
+    'environment_features': 'text',
+    'environment_materials': 'text',
+    'geo_loc_names': 'text',
+    'species': 'text',
+    'study_names': 'text',
+    'id': 'text',
+    'assembly_accession': 'text',
+    'contig': 'text',
+    'lineage': 'text',
+    'tax_id': 'text',
+    'genus': 'text',
+    'family': 'text',
+    
+    // Range filters
+    'bgc_count': 'range',
+    'latitudes': 'range',
+    'longitudes': 'range',
+    
+    // Select filters
+    'instrument_platform': 'select',
+    
+    // Multiselect filters
+    'environment_biomes': 'multiselect',
+    'product_class': 'multiselect',
+    'product_type': 'multiselect',
+    
+    // Boolean filters
+    'is_complete': 'boolean',
+    
+    // Date filters
+    'public_release_date': 'date'
+  };
+  
+  return filterTypes[key] || 'text';
+}
+
 // Browse endpoints
 router.get('/browse/studies', async (req, res) => {
   try {
@@ -135,6 +295,9 @@ router.get('/browse/studies', async (req, res) => {
     const sortColumn = req.query.sortColumn || 'public_release_date';
     const sortDirection = req.query.sortDirection || 'desc';
 
+    // Parse filters
+    const filters = parseFilters(req.query);
+
     // Validate sort parameters to prevent SQL injection
     const validColumns = ['accession', 'study_name', 'bioproject', 'public_release_date', 'bgc_count'];
     const validDirections = ['asc', 'desc'];
@@ -142,8 +305,16 @@ router.get('/browse/studies', async (req, res) => {
     const column = validColumns.includes(sortColumn) ? sortColumn : 'public_release_date';
     const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'desc';
 
-    // Get studies with pagination and BGC count
-    const studiesResult = await db.query(`
+    // Build filter WHERE clause
+    const { whereClause, params: filterParams } = buildFilterWhereClause(filters, 's');
+    
+    // Adjust parameter indices for pagination
+    const paginationParams = [limit, offset];
+    const allParams = [...filterParams, ...paginationParams];
+    const limitOffset = `LIMIT $${filterParams.length + 1} OFFSET $${filterParams.length + 2}`;
+
+    // Get studies with pagination, filtering, and BGC count
+    const studiesQuery = `
       SELECT s.*, 
         (SELECT COUNT(*) 
          FROM bgcs bgc
@@ -155,12 +326,20 @@ router.get('/browse/studies', async (req, res) => {
          JOIN study_samples ss ON samp.id = ss.sample_id
          WHERE ss.study_id = s.id) AS bgc_count
       FROM studies s
+      ${whereClause}
       ORDER BY ${column === 'bgc_count' ? 'bgc_count' : 's.' + column} ${direction}
-      LIMIT $1 OFFSET $2
-    `, [limit, offset]);
+      ${limitOffset}
+    `;
 
-    // Get total count
-    const countResult = await db.query('SELECT COUNT(*) FROM studies s');
+    const studiesResult = await db.query(studiesQuery, allParams);
+
+    // Get total count with filters
+    const countQuery = `
+      SELECT COUNT(*) 
+      FROM studies s
+      ${whereClause}
+    `;
+    const countResult = await db.query(countQuery, filterParams);
     const total = parseInt(countResult.rows[0].count);
 
     res.json({
@@ -227,7 +406,6 @@ router.get('/browse/runs', async (req, res) => {
     const offset = (page - 1) * limit;
     const sortColumn = req.query.sortColumn || 'accession';
     const sortDirection = req.query.sortDirection || 'asc';
-    const filters = req.query.filters ? JSON.parse(req.query.filters) : {};
 
     // Validate sort parameters to prevent SQL injection
     const validColumns = ['accession', 'sample_name', 'experiment_type', 'instrument_platform', 'bgc_count'];
@@ -235,50 +413,6 @@ router.get('/browse/runs', async (req, res) => {
 
     const column = validColumns.includes(sortColumn) ? sortColumn : 'accession';
     const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc';
-
-    // Build WHERE clause based on filters
-    let whereClause = '';
-    const queryParams = [limit, offset];
-    let paramIndex = 3; // Start from $3 since $1 and $2 are used for LIMIT and OFFSET
-
-    if (Object.keys(filters).length > 0) {
-      whereClause = 'WHERE ';
-      const conditions = [];
-
-      if (filters.accession) {
-        conditions.push(`r.accession ILIKE $${paramIndex}`);
-        queryParams.push(`%${filters.accession}%`);
-        paramIndex++;
-      }
-
-      if (filters.sample_name) {
-        conditions.push(`s.sample_name ILIKE $${paramIndex}`);
-        queryParams.push(`%${filters.sample_name}%`);
-        paramIndex++;
-      }
-
-      if (filters.experiment_type) {
-        conditions.push(`r.experiment_type ILIKE $${paramIndex}`);
-        queryParams.push(`%${filters.experiment_type}%`);
-        paramIndex++;
-      }
-
-      if (filters.instrument_platform) {
-        conditions.push(`r.instrument_platform ILIKE $${paramIndex}`);
-        queryParams.push(`%${filters.instrument_platform}%`);
-        paramIndex++;
-      }
-
-      // BGC count filtering would require a HAVING clause on a subquery, which is more complex
-      // For now, we'll skip it for simplicity
-
-      whereClause += conditions.join(' AND ');
-
-      // If no conditions were added, remove the WHERE clause
-      if (conditions.length === 0) {
-        whereClause = '';
-      }
-    }
 
     // Get runs with pagination and BGC count
     const runsResult = await db.query(`
@@ -290,17 +424,12 @@ router.get('/browse/runs', async (req, res) => {
          WHERE ra.run_id = r.id) AS bgc_count
       FROM runs r
       JOIN samples s ON r.sample_id = s.id
-      ${whereClause}
       ORDER BY ${column === 'sample_name' ? 's.sample_name' : column === 'bgc_count' ? 'bgc_count' : 'r.' + column} ${direction}
       LIMIT $1 OFFSET $2
-    `, queryParams);
+    `, [limit, offset]);
 
-    // Get total count with filters
-    let countQuery = 'SELECT COUNT(*) FROM runs r JOIN samples s ON r.sample_id = s.id';
-    if (whereClause) {
-      countQuery += ' ' + whereClause;
-    }
-    const countResult = await db.query(countQuery, queryParams.slice(2)); // Remove limit and offset
+    // Get total count
+    const countResult = await db.query('SELECT COUNT(*) FROM runs r JOIN samples s ON r.sample_id = s.id');
     const total = parseInt(countResult.rows[0].count);
 
     res.json({
@@ -323,6 +452,9 @@ router.get('/browse/biomes', async (req, res) => {
     const sortColumn = req.query.sortColumn || 'id';
     const sortDirection = req.query.sortDirection || 'asc';
 
+    // Parse filters
+    const filters = parseFilters(req.query);
+
     // Validate sort parameters to prevent SQL injection
     const validColumns = ['id', 'lineage', 'bgc_count'];
     const validDirections = ['asc', 'desc'];
@@ -330,8 +462,16 @@ router.get('/browse/biomes', async (req, res) => {
     const column = validColumns.includes(sortColumn) ? sortColumn : 'id';
     const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc';
 
-    // Get biomes with pagination and BGC count
-    const biomesResult = await db.query(`
+    // Build filter WHERE clause
+    const { whereClause, params: filterParams } = buildFilterWhereClause(filters, 'b');
+    
+    // Adjust parameter indices for pagination
+    const paginationParams = [limit, offset];
+    const allParams = [...filterParams, ...paginationParams];
+    const limitOffset = `LIMIT $${filterParams.length + 1} OFFSET $${filterParams.length + 2}`;
+
+    // Get biomes with pagination, filtering, and BGC count
+    const biomesQuery = `
       SELECT b.*,
         (SELECT COUNT(*) 
          FROM bgcs bgc
@@ -343,12 +483,20 @@ router.get('/browse/biomes', async (req, res) => {
          JOIN sample_biomes sb ON s.id = sb.sample_id
          WHERE sb.biome_id = b.id) AS bgc_count
       FROM biomes b
+      ${whereClause}
       ORDER BY ${column === 'bgc_count' ? 'bgc_count' : 'b.' + column} ${direction}
-      LIMIT $1 OFFSET $2
-    `, [limit, offset]);
+      ${limitOffset}
+    `;
 
-    // Get total count
-    const countResult = await db.query('SELECT COUNT(*) FROM biomes b');
+    const biomesResult = await db.query(biomesQuery, allParams);
+
+    // Get total count with filters
+    const countQuery = `
+      SELECT COUNT(*) 
+      FROM biomes b
+      ${whereClause}
+    `;
+    const countResult = await db.query(countQuery, filterParams);
     const total = parseInt(countResult.rows[0].count);
 
     res.json({
@@ -371,24 +519,51 @@ router.get('/browse/bgcs', async (req, res) => {
     const sortColumn = req.query.sortColumn || 'id';
     const sortDirection = req.query.sortDirection || 'asc';
 
+    // Parse filters
+    const filters = parseFilters(req.query);
+
     // Validate sort parameters to prevent SQL injection
-    const validColumns = ['id', 'product_class', 'assembly_accession', 'contig'];
+    const validColumns = ['id', 'product_class', 'product_type', 'assembly_accession', 'contig', 'is_complete'];
     const validDirections = ['asc', 'desc'];
 
     const column = validColumns.includes(sortColumn) ? sortColumn : 'id';
     const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc';
 
-    // Get BGCs with pagination, joining with assemblies to get assembly info
-    const bgcsResult = await db.query(`
+    // Build filter WHERE clause - need special handling for BGCs table
+    let { whereClause, params: filterParams } = buildFilterWhereClause(filters, 'b');
+    
+    // Handle assembly_accession filter specially since it's from joined table
+    const assemblyFilters = filters.filter(f => f.key === 'assembly_accession');
+    if (assemblyFilters.length > 0) {
+      // Replace 'b.assembly_accession' with 'a.accession' in the where clause
+      whereClause = whereClause.replace(/b\.assembly_accession/g, 'a.accession');
+    }
+    
+    // Adjust parameter indices for pagination
+    const paginationParams = [limit, offset];
+    const allParams = [...filterParams, ...paginationParams];
+    const limitOffset = `LIMIT $${filterParams.length + 1} OFFSET $${filterParams.length + 2}`;
+
+    // Get BGCs with pagination, filtering, joining with assemblies to get assembly info
+    const bgcsQuery = `
       SELECT b.*, a.accession as assembly_accession 
       FROM bgcs b
       JOIN assemblies a ON b.assembly = a.id
+      ${whereClause}
       ORDER BY ${column === 'assembly_accession' ? 'a.accession' : 'b.' + column} ${direction}
-      LIMIT $1 OFFSET $2
-    `, [limit, offset]);
+      ${limitOffset}
+    `;
 
-    // Get total count
-    const countResult = await db.query('SELECT COUNT(*) FROM bgcs b JOIN assemblies a ON b.assembly = a.id');
+    const bgcsResult = await db.query(bgcsQuery, allParams);
+
+    // Get total count with filters
+    const countQuery = `
+      SELECT COUNT(*) 
+      FROM bgcs b 
+      JOIN assemblies a ON b.assembly = a.id
+      ${whereClause}
+    `;
+    const countResult = await db.query(countQuery, filterParams);
     const total = parseInt(countResult.rows[0].count);
 
     res.json({
@@ -411,6 +586,9 @@ router.get('/browse/gcfs', async (req, res) => {
     const sortColumn = req.query.sortColumn || 'id';
     const sortDirection = req.query.sortDirection || 'asc';
 
+    // Parse filters
+    const filters = parseFilters(req.query);
+
     // Validate sort parameters to prevent SQL injection
     const validColumns = ['id', 'bgc_count'];
     const validDirections = ['asc', 'desc'];
@@ -418,20 +596,68 @@ router.get('/browse/gcfs', async (req, res) => {
     const column = validColumns.includes(sortColumn) ? sortColumn : 'id';
     const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc';
 
-    // Get GCFs with pagination, including a count of BGCs in each GCF
-    const gcfsResult = await db.query(`
+    // Build filter WHERE clause for GCFs - need special handling since we're using GROUP BY
+    let havingClause = '';
+    let whereClause = '';
+    const filterParams = [];
+    let paramIndex = 1;
+
+    filters.forEach(filter => {
+      const { key, value, type } = filter;
+      
+      if (key === 'id' && value && value.trim()) {
+        whereClause = `WHERE g.id::text ILIKE $${paramIndex}`;
+        filterParams.push(`%${value.trim()}%`);
+        paramIndex++;
+      } else if (key === 'bgc_count' && value && (value.min || value.max)) {
+        const conditions = [];
+        if (value.min) {
+          conditions.push(`COUNT(b.id) >= $${paramIndex}`);
+          filterParams.push(parseFloat(value.min));
+          paramIndex++;
+        }
+        if (value.max) {
+          conditions.push(`COUNT(b.id) <= $${paramIndex}`);
+          filterParams.push(parseFloat(value.max));
+          paramIndex++;
+        }
+        if (conditions.length > 0) {
+          havingClause = `HAVING ${conditions.join(' AND ')}`;
+        }
+      }
+    });
+
+    // Adjust parameter indices for pagination
+    const paginationParams = [limit, offset];
+    const allParams = [...filterParams, ...paginationParams];
+    const limitOffset = `LIMIT $${filterParams.length + 1} OFFSET $${filterParams.length + 2}`;
+
+    // Get GCFs with pagination, filtering, including a count of BGCs in each GCF
+    const gcfsQuery = `
       SELECT g.id, COUNT(b.id) as bgc_count
       FROM gcfs g
       LEFT JOIN bgcs b ON g.id = b.gcf_id
+      ${whereClause}
       GROUP BY g.id
+      ${havingClause}
       ORDER BY ${column === 'id' ? 'g.id' : column} ${direction}
-      LIMIT $1 OFFSET $2
-    `, [limit, offset]);
+      ${limitOffset}
+    `;
 
-    // Get total count
-    const countResult = await db.query(`
-      SELECT COUNT(*) FROM gcfs
-    `);
+    const gcfsResult = await db.query(gcfsQuery, allParams);
+
+    // Get total count with filters
+    const countQuery = `
+      SELECT COUNT(*) FROM (
+        SELECT g.id
+        FROM gcfs g
+        LEFT JOIN bgcs b ON g.id = b.gcf_id
+        ${whereClause}
+        GROUP BY g.id
+        ${havingClause}
+      ) as filtered_gcfs
+    `;
+    const countResult = await db.query(countQuery, filterParams);
     const total = parseInt(countResult.rows[0].count);
 
     res.json({
@@ -453,7 +679,6 @@ router.get('/browse/assemblies', async (req, res) => {
     const offset = (page - 1) * limit;
     const sortColumn = req.query.sortColumn || 'id';
     const sortDirection = req.query.sortDirection || 'asc';
-    const filters = req.query.filters ? JSON.parse(req.query.filters) : {};
 
     // Validate sort parameters to prevent SQL injection
     const validColumns = ['id', 'accession', 'wgs_accession', 'coverage', 'bgc_count'];
@@ -462,80 +687,18 @@ router.get('/browse/assemblies', async (req, res) => {
     const column = validColumns.includes(sortColumn) ? sortColumn : 'id';
     const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc';
 
-    // Build WHERE and HAVING clauses based on filters
-    let whereClause = '';
-    let havingClause = '';
-    const queryParams = [limit, offset];
-    let paramIndex = 3; // Start from $3 since $1 and $2 are used for LIMIT and OFFSET
-
-    if (Object.keys(filters).length > 0) {
-      whereClause = 'WHERE ';
-      const conditions = [];
-
-      if (filters.id) {
-        conditions.push(`a.id ILIKE $${paramIndex}`);
-        queryParams.push(`%${filters.id}%`);
-        paramIndex++;
-      }
-
-      if (filters.accession) {
-        conditions.push(`a.accession ILIKE $${paramIndex}`);
-        queryParams.push(`%${filters.accession}%`);
-        paramIndex++;
-      }
-
-      if (filters.wgs_accession) {
-        conditions.push(`a.wgs_accession ILIKE $${paramIndex}`);
-        queryParams.push(`%${filters.wgs_accession}%`);
-        paramIndex++;
-      }
-
-      if (filters.coverage) {
-        conditions.push(`a.coverage = $${paramIndex}`);
-        queryParams.push(parseFloat(filters.coverage));
-        paramIndex++;
-      }
-
-      if (filters.bgc_count) {
-        havingClause = ` HAVING COUNT(b.id) = $${paramIndex}`;
-        queryParams.push(parseInt(filters.bgc_count));
-        paramIndex++;
-      }
-
-      whereClause += conditions.join(' AND ');
-
-      // If no conditions were added, remove the WHERE clause
-      if (conditions.length === 0) {
-        whereClause = '';
-      }
-    }
-
     // Get assemblies with pagination, including a count of BGCs in each assembly
     const assembliesResult = await db.query(`
       SELECT a.id, a.accession, a.wgs_accession, a.coverage, COUNT(b.id) as bgc_count
       FROM assemblies a
       LEFT JOIN bgcs b ON a.id = b.assembly
-      ${whereClause}
       GROUP BY a.id, a.accession, a.wgs_accession, a.coverage
-      ${havingClause}
       ORDER BY ${column === 'bgc_count' ? 'bgc_count' : 'a.' + column} ${direction}
       LIMIT $1 OFFSET $2
-    `, queryParams);
+    `, [limit, offset]);
 
-    // Get total count with filters
-    // For accurate count with HAVING clause, we need a subquery
-    let countQuery = `
-      SELECT COUNT(*) FROM (
-        SELECT a.id
-        FROM assemblies a
-        LEFT JOIN bgcs b ON a.id = b.assembly
-        ${whereClause}
-        GROUP BY a.id
-        ${havingClause}
-      ) as filtered_assemblies
-    `;
-
-    const countResult = await db.query(countQuery, queryParams.slice(2)); // Remove limit and offset
+    // Get total count
+    const countResult = await db.query('SELECT COUNT(*) FROM assemblies');
     const total = parseInt(countResult.rows[0].count);
 
     res.json({
@@ -558,6 +721,9 @@ router.get('/browse/analyses', async (req, res) => {
     const sortColumn = req.query.sortColumn || 'analysis_id';
     const sortDirection = req.query.sortDirection || 'asc';
 
+    // Parse filters
+    const filters = parseFilters(req.query);
+
     // Validate sort parameters to prevent SQL injection
     const validColumns = [
       'analysis_id', 'analysis_accession', 'instrument_platform', 'bgc_count',
@@ -571,19 +737,32 @@ router.get('/browse/analyses', async (req, res) => {
     const column = validColumns.includes(sortColumn) ? sortColumn : 'analysis_id';
     const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc';
 
-    // Get analyses with pagination from the unified materialized view
-    const analysesResult = await db.query(`
+    // Build filter WHERE clause - no table alias needed for materialized view
+    const { whereClause, params: filterParams } = buildFilterWhereClause(filters);
+    
+    // Adjust parameter indices for pagination
+    const paginationParams = [limit, offset];
+    const allParams = [...filterParams, ...paginationParams];
+    const limitOffset = `LIMIT $${filterParams.length + 1} OFFSET $${filterParams.length + 2}`;
+
+    // Get analyses with pagination and filtering from the unified materialized view
+    const analysesQuery = `
       SELECT *
       FROM unified_analyses_materialized
+      ${whereClause}
       ORDER BY ${column} ${direction}
-      LIMIT $1 OFFSET $2
-    `, [limit, offset]);
+      ${limitOffset}
+    `;
 
-    // Get total count
-    const countResult = await db.query(`
+    const analysesResult = await db.query(analysesQuery, allParams);
+
+    // Get total count with filters
+    const countQuery = `
       SELECT COUNT(*) 
       FROM unified_analyses_materialized
-    `);
+      ${whereClause}
+    `;
+    const countResult = await db.query(countQuery, filterParams);
     const total = parseInt(countResult.rows[0].count);
 
     res.json({
@@ -594,6 +773,400 @@ router.get('/browse/analyses', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching analyses:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/browse/taxonomy', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 100;
+    const offset = (page - 1) * limit;
+    const sortColumn = req.query.sortColumn || 'species';
+    const sortDirection = req.query.sortDirection || 'asc';
+
+    // Parse filters
+    const filters = parseFilters(req.query);
+
+    // Validate sort parameters to prevent SQL injection
+    const validColumns = ['host_tax_id', 'species', 'bgc_count'];
+    const validDirections = ['asc', 'desc'];
+
+    const column = validColumns.includes(sortColumn) ? sortColumn : 'species';
+    const direction = validDirections.includes(sortDirection.toLowerCase()) ? sortDirection.toLowerCase() : 'asc';
+
+    // Build filter WHERE clause for taxonomy aggregation
+    let { whereClause, params: filterParams } = buildFilterWhereClause(filters, 's');
+    
+    // Handle special taxonomy filters
+    const taxFilters = filters.filter(f => ['tax_id', 'genus', 'family'].includes(f.key));
+    if (taxFilters.length > 0) {
+      // For now, we'll treat tax_id as host_tax_id and ignore genus/family since they're not in the schema
+      taxFilters.forEach(filter => {
+        if (filter.key === 'tax_id' && filter.value && filter.value.trim()) {
+          const paramIndex = filterParams.length + 1;
+          if (whereClause) {
+            whereClause += ` AND s.host_tax_id::text ILIKE $${paramIndex}`;
+          } else {
+            whereClause = `WHERE s.host_tax_id::text ILIKE $${paramIndex}`;
+          }
+          filterParams.push(`%${filter.value.trim()}%`);
+        }
+      });
+    }
+    
+    // Adjust parameter indices for pagination
+    const paginationParams = [limit, offset];
+    const allParams = [...filterParams, ...paginationParams];
+    const limitOffset = `LIMIT $${filterParams.length + 1} OFFSET $${filterParams.length + 2}`;
+
+    // Get taxonomy data with BGC counts
+    const taxonomyQuery = `
+      SELECT 
+        s.host_tax_id,
+        s.species,
+        COUNT(DISTINCT bgc.id) as bgc_count
+      FROM samples s
+      LEFT JOIN sample_runs sr ON s.id = sr.sample_id
+      LEFT JOIN runs r ON sr.run_id = r.id
+      LEFT JOIN run_assemblies ra ON r.id = ra.run_id
+      LEFT JOIN assemblies a ON ra.assembly_id = a.id
+      LEFT JOIN bgcs bgc ON a.id = bgc.assembly
+      ${whereClause}
+      GROUP BY s.host_tax_id, s.species
+      HAVING s.host_tax_id IS NOT NULL OR s.species IS NOT NULL
+      ORDER BY ${column === 'bgc_count' ? 'bgc_count' : column} ${direction}
+      ${limitOffset}
+    `;
+
+    const taxonomyResult = await db.query(taxonomyQuery, allParams);
+
+    // Get total count with filters
+    const countQuery = `
+      SELECT COUNT(*) FROM (
+        SELECT s.host_tax_id, s.species
+        FROM samples s
+        ${whereClause}
+        GROUP BY s.host_tax_id, s.species
+        HAVING s.host_tax_id IS NOT NULL OR s.species IS NOT NULL
+      ) as taxonomy_groups
+    `;
+    const countResult = await db.query(countQuery, filterParams);
+    const total = parseInt(countResult.rows[0].count);
+
+    res.json({
+      data: taxonomyResult.rows,
+      total,
+      page,
+      limit
+    });
+  } catch (error) {
+    console.error('Error fetching taxonomy:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get distinct values for filter dropdowns
+router.get('/browse/filter-options/:table/:column', async (req, res) => {
+  try {
+    const { table, column } = req.params;
+    const limit = parseInt(req.query.limit) || 100;
+    
+    // Define allowed table-column combinations for security
+    const allowedFilters = {
+      analyses: ['instrument_platform', 'environment_biomes', 'species'],
+      studies: ['bioproject'],
+      bgcs: ['product_class', 'product_type', 'anchor'],
+      biomes: ['lineage'],
+      taxonomy: ['species', 'genus', 'family']
+    };
+    
+    if (!allowedFilters[table] || !allowedFilters[table].includes(column)) {
+      return res.status(400).json({ error: 'Invalid table or column' });
+    }
+    
+    let query;
+    let params = [limit];
+    
+    switch (table) {
+      case 'analyses':
+        if (column === 'instrument_platform') {
+          query = `
+            SELECT DISTINCT instrument_platform as value, COUNT(*) as count
+            FROM unified_analyses_materialized 
+            WHERE instrument_platform IS NOT NULL 
+            GROUP BY instrument_platform 
+            ORDER BY instrument_platform ASC 
+            LIMIT $1
+          `;
+        } else if (column === 'environment_biomes') {
+          query = `
+            SELECT DISTINCT unnest(environment_biomes) as value, COUNT(*) as count
+            FROM unified_analyses_materialized 
+            WHERE environment_biomes IS NOT NULL 
+            GROUP BY value 
+            ORDER BY value ASC 
+            LIMIT $1
+          `;
+        } else if (column === 'species') {
+          query = `
+            SELECT DISTINCT unnest(species) as value, COUNT(*) as count
+            FROM unified_analyses_materialized 
+            WHERE species IS NOT NULL 
+            GROUP BY value 
+            ORDER BY value ASC 
+            LIMIT $1
+          `;
+        }
+        break;
+        
+      case 'studies':
+        if (column === 'bioproject') {
+          query = `
+            SELECT DISTINCT bioproject as value, COUNT(*) as count
+            FROM studies 
+            WHERE bioproject IS NOT NULL 
+            GROUP BY bioproject 
+            ORDER BY bioproject ASC 
+            LIMIT $1
+          `;
+        }
+        break;
+        
+      case 'bgcs':
+        if (column === 'product_class') {
+          query = `
+            SELECT DISTINCT unnest(product_class) as value, COUNT(*) as count
+            FROM bgcs 
+            GROUP BY value 
+            ORDER BY value ASC 
+            LIMIT $1
+          `;
+        } else if (column === 'product_type') {
+          query = `
+            SELECT DISTINCT unnest(product_type) as value, COUNT(*) as count
+            FROM bgcs 
+            GROUP BY value 
+            ORDER BY value ASC 
+            LIMIT $1
+          `;
+        } else if (column === 'anchor') {
+          query = `
+            SELECT DISTINCT anchor as value, COUNT(*) as count
+            FROM bgcs 
+            WHERE anchor IS NOT NULL 
+            GROUP BY anchor 
+            ORDER BY anchor ASC 
+            LIMIT $1
+          `;
+        }
+        break;
+        
+      case 'biomes':
+        if (column === 'lineage') {
+          query = `
+            SELECT DISTINCT lineage as value, COUNT(*) as count
+            FROM biomes 
+            WHERE lineage IS NOT NULL 
+            GROUP BY lineage 
+            ORDER BY lineage ASC 
+            LIMIT $1
+          `;
+        }
+        break;
+        
+      case 'taxonomy':
+        if (column === 'species') {
+          query = `
+            SELECT DISTINCT species as value, COUNT(*) as count
+            FROM samples 
+            WHERE species IS NOT NULL 
+            GROUP BY species 
+            ORDER BY species ASC 
+            LIMIT $1
+          `;
+        }
+        break;
+        
+      default:
+        return res.status(400).json({ error: 'Unsupported table' });
+    }
+    
+    if (!query) {
+      return res.status(400).json({ error: 'Unsupported column for this table' });
+    }
+    
+    const result = await db.query(query, params);
+    
+    // Return just the values for dropdown options
+    const options = result.rows.map(row => row.value);
+    
+    res.json({
+      options,
+      total: result.rows.length,
+      // Also include counts for potential future use
+      detailed: result.rows
+    });
+    
+  } catch (error) {
+    console.error('Error fetching filter options:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Batch endpoint to get multiple filter options at once
+router.post('/browse/filter-options/batch', async (req, res) => {
+  try {
+    const { requests } = req.body; // Array of {table, column} objects
+    
+    if (!Array.isArray(requests) || requests.length === 0) {
+      return res.status(400).json({ error: 'Invalid requests format' });
+    }
+    
+    const results = {};
+    
+    for (const request of requests) {
+      const { table, column } = request;
+      try {
+        // Call the single endpoint logic directly
+        const limit = 100;
+        
+        // Define allowed table-column combinations for security
+        const allowedFilters = {
+          analyses: ['instrument_platform', 'environment_biomes', 'species'],
+          studies: ['bioproject'],
+          bgcs: ['product_class', 'product_type', 'anchor'],
+          biomes: ['lineage'],
+          taxonomy: ['species', 'genus', 'family']
+        };
+        
+        if (!allowedFilters[table] || !allowedFilters[table].includes(column)) {
+          results[`${table}.${column}`] = [];
+          continue;
+        }
+        
+        let query;
+        let params = [limit];
+        
+        switch (table) {
+          case 'analyses':
+            if (column === 'instrument_platform') {
+              query = `
+                SELECT DISTINCT instrument_platform as value, COUNT(*) as count
+                FROM unified_analyses_materialized 
+                WHERE instrument_platform IS NOT NULL 
+                GROUP BY instrument_platform 
+                ORDER BY instrument_platform ASC 
+                LIMIT $1
+              `;
+            } else if (column === 'environment_biomes') {
+              query = `
+                SELECT DISTINCT unnest(environment_biomes) as value, COUNT(*) as count
+                FROM unified_analyses_materialized 
+                WHERE environment_biomes IS NOT NULL 
+                GROUP BY value 
+                ORDER BY value ASC 
+                LIMIT $1
+              `;
+            } else if (column === 'species') {
+              query = `
+                SELECT DISTINCT unnest(species) as value, COUNT(*) as count
+                FROM unified_analyses_materialized 
+                WHERE species IS NOT NULL 
+                GROUP BY value 
+                ORDER BY value ASC 
+                LIMIT $1
+              `;
+            }
+            break;
+            
+          case 'studies':
+            if (column === 'bioproject') {
+              query = `
+                SELECT DISTINCT bioproject as value, COUNT(*) as count
+                FROM studies 
+                WHERE bioproject IS NOT NULL 
+                GROUP BY bioproject 
+                ORDER BY bioproject ASC 
+                LIMIT $1
+              `;
+            }
+            break;
+            
+          case 'bgcs':
+            if (column === 'product_class') {
+              query = `
+                SELECT DISTINCT unnest(product_class) as value, COUNT(*) as count
+                FROM bgcs 
+                GROUP BY value 
+                ORDER BY value ASC 
+                LIMIT $1
+              `;
+            } else if (column === 'product_type') {
+              query = `
+                SELECT DISTINCT unnest(product_type) as value, COUNT(*) as count
+                FROM bgcs 
+                GROUP BY value 
+                ORDER BY value ASC 
+                LIMIT $1
+              `;
+            } else if (column === 'anchor') {
+              query = `
+                SELECT DISTINCT anchor as value, COUNT(*) as count
+                FROM bgcs 
+                WHERE anchor IS NOT NULL 
+                GROUP BY anchor 
+                ORDER BY anchor ASC 
+                LIMIT $1
+              `;
+            }
+            break;
+            
+          case 'biomes':
+            if (column === 'lineage') {
+              query = `
+                SELECT DISTINCT lineage as value, COUNT(*) as count
+                FROM biomes 
+                WHERE lineage IS NOT NULL 
+                GROUP BY lineage 
+                ORDER BY lineage ASC 
+                LIMIT $1
+              `;
+            }
+            break;
+            
+          case 'taxonomy':
+            if (column === 'species') {
+              query = `
+                SELECT DISTINCT species as value, COUNT(*) as count
+                FROM samples 
+                WHERE species IS NOT NULL 
+                GROUP BY species 
+                ORDER BY species ASC 
+                LIMIT $1
+              `;
+            }
+            break;
+        }
+        
+        if (query) {
+          const result = await db.query(query, params);
+          const options = result.rows.map(row => row.value);
+          results[`${table}.${column}`] = options;
+        } else {
+          results[`${table}.${column}`] = [];
+        }
+        
+      } catch (error) {
+        console.error(`Error fetching options for ${table}.${column}:`, error);
+        results[`${table}.${column}`] = [];
+      }
+    }
+    
+    res.json(results);
+    
+  } catch (error) {
+    console.error('Error in batch filter options:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

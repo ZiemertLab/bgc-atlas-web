@@ -99,4 +99,16 @@ export const getAnalyses = async (params = {}) => {
   return response.data;
 };
 
+// Get filter options for dropdowns
+export const getFilterOptions = async (table: string, column: string) => {
+  const response = await api.get(`/browse/filter-options/${table}/${column}`);
+  return response.data;
+};
+
+// Get multiple filter options in one request
+export const getBatchFilterOptions = async (requests: Array<{table: string, column: string}>) => {
+  const response = await api.post('/browse/filter-options/batch', { requests });
+  return response.data;
+};
+
 export default api;

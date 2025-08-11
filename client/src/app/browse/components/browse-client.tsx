@@ -1,10 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { getBgcs, getGcfs, getTaxonomy, getBiomes, getStudies, getAnalyses } from "@/services/api";
 import { TruncatedText } from "@/components/truncated-text";
+import { FilterMenu, FilterValue } from "./filter-menu";
 
 // Type for sort state
 type SortState = {
@@ -20,22 +18,11 @@ type SortState = {
   direction: "asc" | "desc" | null;
 };
 
-// Type for filter state
-type FilterState = {
-  [key: string]: any;
-};
 
-const FilterSection = ({ title, children }: { title: string, children: React.ReactNode }) => (
-  <div className="py-4">
-    <h3 className="font-semibold text-lg mb-4">{title}</h3>
-    {children}
-  </div>
-);
 
 export function BrowseClient() {
   console.log("[DEBUG_LOG] BrowseClient: Component is initializing");
   
-  const [sliderValue, setSliderValue] = useState([5000, 25000]);
   const [bgcData, setBgcData] = useState({ data: [], total: 0, page: 1, limit: 10 });
   const [gcfData, setGcfData] = useState({ data: [], total: 0, page: 1, limit: 10 });
   const [taxonomyData, setTaxonomyData] = useState({ data: [], total: 0, page: 1, limit: 10 });
@@ -44,25 +31,18 @@ export function BrowseClient() {
   const [analysesData, setAnalysesData] = useState({ data: [], total: 0, page: 1, limit: 10 });
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("analyses");
-  const [filtersVisible, setFiltersVisible] = useState(false);
+  const [activeFilters, setActiveFilters] = useState<FilterValue[]>([]);
   
   console.log("[DEBUG_LOG] BrowseClient: State initialized, activeTab:", activeTab);
 
   // Sorting states for each table
   const [studiesSort, setStudiesSort] = useState<SortState>({ column: "", direction: null });
-  const [biomesSort, setBiomesSort] = useState<SortState>({ column: "", direction: null });
+  const [biomesSort, setBiomesSort] = useState<SortState>({ column: "bgc_count", direction: "desc" });
   const [gcfsSort, setGcfsSort] = useState<SortState>({ column: "", direction: null });
   const [taxonomySort, setTaxonomySort] = useState<SortState>({ column: "", direction: null });
   const [bgcsSort, setBgcsSort] = useState<SortState>({ column: "", direction: null });
   const [analysesSort, setAnalysesSort] = useState<SortState>({ column: "bgc_count", direction: "desc" });
 
-  // Filtering states for each table
-  const [studiesFilter, setStudiesFilter] = useState<FilterState>({});
-  const [biomesFilter, setBiomesFilter] = useState<FilterState>({});
-  const [gcfsFilter, setGcfsFilter] = useState<FilterState>({});
-  const [taxonomyFilter, setTaxonomyFilter] = useState<FilterState>({});
-  const [bgcsFilter, setBgcsFilter] = useState<FilterState>({});
-  const [analysesFilter, setAnalysesFilter] = useState<FilterState>({});
 
   // Generic sorting function
   const handleSort = (
@@ -92,31 +72,6 @@ export function BrowseClient() {
   const handleBgcsSort = (column: string) => handleSort(column, bgcsSort, setBgcsSort);
   const handleAnalysesSort = (column: string) => handleSort(column, analysesSort, setAnalysesSort);
 
-  // Generic filter function
-  const handleFilter = (
-    column: string,
-    value: any,
-    currentFilter: FilterState,
-    setFilter: React.Dispatch<React.SetStateAction<FilterState>>
-  ) => {
-    // If value is empty, remove the filter
-    if (value === "" || value === null || value === undefined) {
-      const newFilter = { ...currentFilter };
-      delete newFilter[column];
-      setFilter(newFilter);
-    } else {
-      // Otherwise, set the filter
-      setFilter({ ...currentFilter, [column]: value });
-    }
-  };
-
-  // Filter functions for each table
-  const handleStudiesFilter = (column: string, value: any) => handleFilter(column, value, studiesFilter, setStudiesFilter);
-  const handleBiomesFilter = (column: string, value: any) => handleFilter(column, value, biomesFilter, setBiomesFilter);
-  const handleGcfsFilter = (column: string, value: any) => handleFilter(column, value, gcfsFilter, setGcfsFilter);
-  const handleTaxonomyFilter = (column: string, value: any) => handleFilter(column, value, taxonomyFilter, setTaxonomyFilter);
-  const handleBgcsFilter = (column: string, value: any) => handleFilter(column, value, bgcsFilter, setBgcsFilter);
-  const handleAnalysesFilter = (column: string, value: any) => handleFilter(column, value, analysesFilter, setAnalysesFilter);
 
   // Page change handlers for each table
   const handleStudiesPageChange = (page: number) => {
@@ -168,6 +123,33 @@ export function BrowseClient() {
     setAnalysesData(prev => ({ ...prev, limit: pageSize, page: 1 }));
   };
 
+  // Filter change handler
+  const handleFiltersChange = useCallback((filters: FilterValue[]) => {
+    console.log("[DEBUG_LOG] BrowseClient: Filters changed:", filters);
+    setActiveFilters(filters);
+    // Reset to first page when filters change
+    switch (activeTab) {
+      case "studies":
+        setStudiesData(prev => ({ ...prev, page: 1 }));
+        break;
+      case "bgcs":
+        setBgcData(prev => ({ ...prev, page: 1 }));
+        break;
+      case "gcfs":
+        setGcfData(prev => ({ ...prev, page: 1 }));
+        break;
+      case "taxonomy":
+        setTaxonomyData(prev => ({ ...prev, page: 1 }));
+        break;
+      case "biomes":
+        setBiomesData(prev => ({ ...prev, page: 1 }));
+        break;
+      case "analyses":
+        setAnalysesData(prev => ({ ...prev, page: 1 }));
+        break;
+    }
+  }, [activeTab]);
+
   // Server-side sorting is now used, so we don't need to sort the data client-side
 
   useEffect(() => {
@@ -179,6 +161,9 @@ export function BrowseClient() {
         setLoading(true);
         console.log("[DEBUG_LOG] BrowseClient: Loading set to true");
 
+        // Prepare filters parameter
+        const filtersParam = activeFilters.length > 0 ? JSON.stringify(activeFilters) : undefined;
+
         // Only fetch data for the active tab to improve performance
         if (activeTab === "studies") {
           console.log("[DEBUG_LOG] BrowseClient: Fetching studies data");
@@ -189,7 +174,7 @@ export function BrowseClient() {
             limit,
             sortColumn: column || undefined,
             sortDirection: direction || undefined,
-            filters: Object.keys(studiesFilter).length > 0 ? studiesFilter : undefined
+            filters: filtersParam
           });
           console.log("Studies data:", response);
           setStudiesData(prev => ({ ...prev, ...response }));
@@ -202,7 +187,7 @@ export function BrowseClient() {
             limit,
             sortColumn: column || undefined,
             sortDirection: direction || undefined,
-            filters: Object.keys(bgcsFilter).length > 0 ? bgcsFilter : undefined
+            filters: filtersParam
           });
           console.log("[DEBUG_LOG] BrowseClient: BGCs data received:", response);
           setBgcData(prev => ({ ...prev, ...response }));
@@ -215,7 +200,7 @@ export function BrowseClient() {
             limit,
             sortColumn: column || undefined,
             sortDirection: direction || undefined,
-            filters: Object.keys(gcfsFilter).length > 0 ? gcfsFilter : undefined
+            filters: filtersParam
           });
           console.log("[DEBUG_LOG] BrowseClient: GCFs data received:", response);
           setGcfData(prev => ({ ...prev, ...response }));
@@ -228,7 +213,7 @@ export function BrowseClient() {
             limit,
             sortColumn: column || undefined,
             sortDirection: direction || undefined,
-            filters: Object.keys(taxonomyFilter).length > 0 ? taxonomyFilter : undefined
+            filters: filtersParam
           });
           console.log("[DEBUG_LOG] BrowseClient: Taxonomy data received:", response);
           setTaxonomyData(prev => ({ ...prev, ...response }));
@@ -241,7 +226,7 @@ export function BrowseClient() {
             limit,
             sortColumn: column || undefined,
             sortDirection: direction || undefined,
-            filters: Object.keys(biomesFilter).length > 0 ? biomesFilter : undefined
+            filters: filtersParam
           });
           console.log("[DEBUG_LOG] BrowseClient: Biomes data received:", response);
           setBiomesData(prev => ({ ...prev, ...response }));
@@ -254,7 +239,7 @@ export function BrowseClient() {
             limit,
             sortColumn: column || undefined,
             sortDirection: direction || undefined,
-            filters: Object.keys(analysesFilter).length > 0 ? analysesFilter : undefined
+            filters: filtersParam
           });
           console.log("[DEBUG_LOG] BrowseClient: Analyses data received:", response);
           setAnalysesData(prev => ({ ...prev, ...response }));
@@ -278,19 +263,20 @@ export function BrowseClient() {
     console.log("[DEBUG_LOG] BrowseClient: About to call fetchData");
     fetchData();
   }, [activeTab, 
-      studiesData.page, studiesData.limit, studiesSort, studiesFilter,
-      bgcData.page, bgcData.limit, bgcsSort, bgcsFilter,
-      gcfData.page, gcfData.limit, gcfsSort, gcfsFilter,
-      taxonomyData.page, taxonomyData.limit, taxonomySort, taxonomyFilter,
-      biomesData.page, biomesData.limit, biomesSort, biomesFilter,
-      analysesData.page, analysesData.limit, analysesSort, analysesFilter
+      studiesData.page, studiesData.limit, studiesSort,
+      bgcData.page, bgcData.limit, bgcsSort,
+      gcfData.page, gcfData.limit, gcfsSort,
+      taxonomyData.page, taxonomyData.limit, taxonomySort,
+      biomesData.page, biomesData.limit, biomesSort,
+      analysesData.page, analysesData.limit, analysesSort,
+      activeFilters
   ]);
 
   const renderEmptyState = (item: string) => (
      <div className="flex flex-col items-center justify-center h-96 border-2 border-dashed rounded-lg">
         <div className="text-5xl text-muted-foreground mb-4">🧬</div>
         <h3 className="text-xl font-semibold">No {item} Found</h3>
-        <p className="text-muted-foreground mt-1">Try adjusting your filters.</p>
+        <p className="text-muted-foreground mt-1">No data available at the moment.</p>
     </div>
   )
 
@@ -316,6 +302,16 @@ export function BrowseClient() {
               }
             },
             {
+              key: "product_type",
+              label: "Product Type",
+              sortable: true,
+              filterable: false,
+              render: (row) => {
+                const text = Array.isArray(row.product_type) ? row.product_type.join(', ') : row.product_type;
+                return <TruncatedText text={text} />;
+              }
+            },
+            {
               key: "assembly_accession",
               label: "Assembly",
               sortable: true,
@@ -335,9 +331,7 @@ export function BrowseClient() {
           limit={bgcData.limit}
           loading={loading}
           sortState={bgcsSort}
-          filterState={bgcsFilter}
           onSort={handleBgcsSort}
-          onFilter={handleBgcsFilter}
           onPageChange={handleBgcsPageChange}
           onPageSizeChange={handleBgcsPageSizeChange}
         />
@@ -369,9 +363,7 @@ export function BrowseClient() {
           limit={gcfData.limit}
           loading={loading}
           sortState={gcfsSort}
-          filterState={gcfsFilter}
           onSort={handleGcfsSort}
-          onFilter={handleGcfsFilter}
           onPageChange={handleGcfsPageChange}
           onPageSizeChange={handleGcfsPageSizeChange}
         />
@@ -591,9 +583,7 @@ export function BrowseClient() {
           limit={analysesData.limit}
           loading={loading}
           sortState={analysesSort}
-          filterState={analysesFilter}
           onSort={handleAnalysesSort}
-          onFilter={handleAnalysesFilter}
           onPageChange={handleAnalysesPageChange}
           onPageSizeChange={handleAnalysesPageSizeChange}
         />
@@ -612,97 +602,21 @@ export function BrowseClient() {
   });
 
   return (
-    <div className={`grid grid-cols-1 gap-8 ${filtersVisible ? 'lg:grid-cols-4' : 'lg:grid-cols-1'}`}>
-      {filtersVisible && (
-        <aside className="col-span-1">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="font-headline">Filters</CardTitle>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setFiltersVisible(!filtersVisible)}
-                className="h-8 w-8 p-0"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-4 w-4"
-                >
-                  <path d="m18 15-6-6-6 6"/>
-                </svg>
-                <span className="sr-only">Hide filters</span>
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <FilterSection title="Cluster Class">
-                <div className="space-y-2">
-                  {["PKS", "NRPS", "RiPP", "Saccharide", "Terpene"].map((cls) => (
-                    <div key={cls} className="flex items-center space-x-2">
-                      <Checkbox id={cls.toLowerCase()} />
-                      <Label htmlFor={cls.toLowerCase()}>{cls}</Label>
-                    </div>
-                  ))}
-                </div>
-              </FilterSection>
-              <FilterSection title="Biome">
-                <div className="flex flex-wrap gap-2">
-                  {["Marine", "Soil", "Freshwater", "Host-associated"].map(biome => (
-                    <Badge key={biome} variant="outline" className="cursor-pointer hover:bg-accent">{biome}</Badge>
-                  ))}
-                </div>
-              </FilterSection>
-              <FilterSection title="Length (bp)">
-                <Slider
-                  defaultValue={sliderValue}
-                  max={100000}
-                  step={1000}
-                  onValueChange={setSliderValue}
-                />
-                <div className="flex justify-between text-sm text-muted-foreground mt-2">
-                  <span>{sliderValue[0]}</span>
-                  <span>{sliderValue[1]}</span>
-                </div>
-              </FilterSection>
-            </CardContent>
-          </Card>
-        </aside>
-      )}
-      <main className={`col-span-1 ${filtersVisible ? 'lg:col-span-3' : 'lg:col-span-1'}`}>
-        {!filtersVisible && (
-          <div className="mb-4">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setFiltersVisible(true)}
-              className="flex items-center gap-2"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-4 w-4"
-              >
-                <path d="M3 6h18M6 12h12M9 18h6"/>
-              </svg>
-              Show Filters
-            </Button>
-          </div>
-        )}
-        <Tabs defaultValue="analyses" value={activeTab} onValueChange={setActiveTab}>
+    <div className="grid grid-cols-1 gap-8">
+      <main className="col-span-1">
+        {/* Filter Menu */}
+        <FilterMenu
+          activeTable={activeTab}
+          filters={[]}
+          onFiltersChange={handleFiltersChange}
+          className="mb-6"
+        />
+        
+        <Tabs defaultValue="analyses" value={activeTab} onValueChange={(newTab) => {
+          setActiveTab(newTab);
+          // Clear filters when switching tabs
+          setActiveFilters([]);
+        }}>
           <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="analyses">Analyses</TabsTrigger>
             <TabsTrigger value="studies">Studies</TabsTrigger>
@@ -758,9 +672,7 @@ export function BrowseClient() {
                     limit={studiesData.limit}
                     loading={loading}
                     sortState={studiesSort}
-                    filterState={studiesFilter}
                     onSort={handleStudiesSort}
-                    onFilter={handleStudiesFilter}
                     onPageChange={handleStudiesPageChange}
                     onPageSizeChange={handleStudiesPageSizeChange}
                   />
@@ -799,9 +711,7 @@ export function BrowseClient() {
                     limit={biomesData.limit}
                     loading={loading}
                     sortState={biomesSort}
-                    filterState={biomesFilter}
                     onSort={handleBiomesSort}
-                    onFilter={handleBiomesFilter}
                     onPageChange={handleBiomesPageChange}
                     onPageSizeChange={handleBiomesPageSizeChange}
                   />
